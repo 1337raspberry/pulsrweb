@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pulsr</title>
+<link rel="stylesheet" href="/src/styles.css">
+</head>
+<body data-view="idle">
+<canvas id="ridge"></canvas>
+
+<main id="intro">
+  <h1>pulsr</h1>
+  <p id="lede">Your music as a ridge of lines. Play something in another tab, then share that tab here.</p>
+  <p id="notice" role="status" hidden></p>
+  <p class="act"><button class="go" id="start">Share a tab</button></p>
+  <div id="guide">
+    <p>In the box Chrome opens:</p>
+    <div id="mock" aria-hidden="true">
+      <p class="m-title">Choose what to share with <span id="m-site"></span></p>
+      <div id="m-panes"></div>
+      <div class="m-body">
+        <div class="m-list"><div class="m-row"><i></i><span id="m-row"></span><b class="n n1">1</b></div></div>
+        <div class="m-preview"><i></i></div>
+      </div>
+      <div class="m-audio-row">
+        <div class="m-audio">
+          <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>
+          <span id="m-audio"></span><i class="m-switch"></i><b class="n n2">2</b>
+        </div>
+      </div>
+      <div class="m-buttons"><span>Cancel</span><span class="m-share">Share with audio<b class="n n3">3</b></span></div>
+    </div>
+    <ol id="steps"></ol>
+    <p id="note" hidden></p>
+  </div>
+  <p id="others">
+    Or <button class="link" id="everything">share everything this computer plays</button>,
+    or <button class="link" id="usemic">use the microphone</button>.
+  </p>
+  <p id="terminal">pulsr also <a class="link" href="https://github.com/1337raspberry/pulsr" target="_blank" rel="noopener">runs in a terminal</a>.</p>
+  <p class="act" id="fallback" hidden><button class="go" id="micfirst">Use the microphone</button></p>
+</main>
+
+<footer id="status" hidden>
+  <span id="what"></span>
+  <span id="hint" hidden></span>
+  <button class="key" id="end"><b>s</b>stop sharing</button>
+  <button class="key" id="nexttheme"><b>t</b>theme</button>
+  <button class="key" id="rise"><b>r</b>rising</button>
+  <button class="key" id="full"><b>f</b>full screen</button>
+</footer>
+
+<div id="panel" hidden>
+  <h2>diagnostics</h2>
+  <div class="row">
+    <button id="share">share system audio</button>
+  </div>
+  <div class="row">
+    <button id="mic">microphone</button>
+    <button id="tone">test signal</button>
+    <label><input type="checkbox" id="audible"> audible</label>
+  </div>
+  <div class="row">
+    <button id="dropvideo">stop video track</button>
+    <button id="measure">measure delay</button>
+    <button id="stop">stop</button>
+    <button id="copy">copy report</button>
+  </div>
+  <div id="meter"><div id="level"></div></div>
+  <pre id="stats"></pre>
+  <pre id="log"></pre>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

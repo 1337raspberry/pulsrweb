@@ -1,0 +1,150 @@
+:root {
+  --background: #1a1b26; --text: #a9b1d6; --c1: #7aa2f7; --c2: #bb9af7; --c3: #f7768e;
+  --mono: "Berkeley Mono", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--background); color: var(--text); overflow: hidden; }
+body {
+  font: 13px/1.55 var(--mono);
+}
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+[hidden] { display: none !important; }
+p { margin: 0; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* The opening text: one size throughout, as in a terminal. */
+#intro {
+  position: fixed; top: 24px; left: 28px; box-sizing: content-box; width: min(47ch, calc(100vw - 68px));
+  padding: 14px 18px 16px; background: color-mix(in srgb, var(--background) 90%, transparent);
+  max-height: calc(100vh - 48px); overflow-y: auto;
+}
+#intro h1 { margin: 0; font-size: inherit; font-weight: 700; color: var(--c1); }
+#intro h1::before { content: "$ "; font-weight: 400; color: var(--text); opacity: 0.5; }
+#lede { max-width: 44ch; }
+#notice { margin-top: 1.55em; color: var(--c3); }
+.act { margin-top: 1.55em; }
+.go { font-weight: 700; color: var(--c1); padding: 2px 0; }
+.go::before { content: "[ "; }
+.go::after { content: " ]"; }
+.go:hover, .go:focus-visible { background: var(--c1); color: var(--background); outline: none; }
+.go:disabled { opacity: 0.45; cursor: default; background: none; color: var(--c1); }
+#guide { margin-top: 1.55em; }
+
+/* A small picture of the browser's own share box, in its colours rather than the page's,
+   with the three things to do in it numbered. */
+#mock {
+  position: relative; margin: 0.8em 14px 1.1em 0; padding: 12px 12px 10px; border-radius: 10px;
+  background: #1e1f23; color: #e3e3e8; font: 10.5px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+}
+#mock .m-title { font-size: 12px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#m-panes { display: flex; border-bottom: 1px solid #3c3e45; }
+#m-panes span { flex: 1; text-align: center; padding: 4px 0 5px; color: #c4c6cf; }
+#m-panes span.on { color: #a8c7fa; box-shadow: 0 2px 0 #a8c7fa; }
+.m-body { display: grid; grid-template-columns: 1.35fr 1fr; gap: 8px; padding: 8px; background: #282a30; }
+.m-list { height: 62px; border-radius: 6px; background: #1b1c20; }
+.m-row {
+  position: relative; display: flex; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 6px 6px 0 0;
+  background: #24427a; outline: 2px solid var(--c1); outline-offset: 1px;
+}
+.m-row i { width: 11px; height: 8px; border-radius: 2px; background: #a8c7fa; flex: none; }
+.m-preview { height: 62px; border-radius: 6px; background: #24427a; padding: 6px 0; }
+.m-preview i { display: block; height: 100%; background: #0f1013; }
+.m-audio-row { padding: 0 8px 8px; background: #282a30; border-radius: 0 0 8px 8px; }
+.m-audio {
+  position: relative; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px;
+  border: 1px solid #5c5f68; outline: 2px solid var(--c2); outline-offset: 1px;
+}
+.m-audio svg { width: 12px; height: 12px; fill: #c4c6cf; flex: none; }
+.m-switch { margin-left: auto; width: 22px; height: 12px; border-radius: 6px; background: #a8c7fa; position: relative; flex: none; }
+.m-switch::after { content: ""; position: absolute; right: 2px; top: 2px; width: 8px; height: 8px; border-radius: 50%; background: #062e6f; }
+.m-buttons { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+.m-buttons span { position: relative; padding: 4px 11px; border-radius: 999px; background: #24427a; color: #d3e3fd; }
+.m-buttons .m-share { background: #a8c7fa; color: #062e6f; outline: 2px solid var(--c3); outline-offset: 1px; }
+#mock .n {
+  position: absolute; right: -9px; top: -9px; width: 17px; height: 17px; border-radius: 50%;
+  display: grid; place-items: center; font: 700 10px/1 system-ui, sans-serif; color: var(--background);
+}
+#mock .n1 { background: var(--c1); }
+#mock .n2 { background: var(--c2); }
+#mock .n3 { background: var(--c3); }
+#steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+#steps li { counter-increment: step; padding-left: 3ch; text-indent: -3ch; }
+#steps li::before { content: counter(step) "  "; font-weight: 700; }
+#steps li:nth-child(1)::before { color: var(--c1); }
+#steps li:nth-child(2)::before { color: var(--c2); }
+#steps li:nth-child(3)::before { color: var(--c3); }
+#note { margin-top: 0.8em; opacity: 0.75; }
+#others { margin-top: 1.55em; opacity: 0.85; }
+#terminal { margin-top: 0.8em; opacity: 0.85; }
+a.link { color: inherit; }
+.link { text-decoration: underline; text-underline-offset: 3px; }
+.link:hover, .link:focus-visible, a.link:hover, a.link:focus-visible { color: var(--c1); outline: none; }
+
+/* While listening: one line of status and keys that fades when the pointer rests. */
+#status {
+  position: fixed; left: 28px; bottom: 20px; display: flex; flex-wrap: wrap; gap: 0 3ch;
+  padding: 4px 10px; background: color-mix(in srgb, var(--background) 88%, transparent);
+  transition: opacity 0.4s;
+}
+#hint { color: var(--c3); }
+.key b { color: var(--c1); margin-right: 1ch; }
+.key:hover, .key:focus-visible { color: var(--c1); outline: none; text-decoration: underline; text-underline-offset: 3px; }
+body.resting[data-view="live"] { cursor: none; }
+body.resting[data-view="live"] #status:not(.hold) { opacity: 0; }
+
+/* The control panel, in the page's colours. */
+#controls {
+  position: fixed; top: 12px; right: 12px; width: min(300px, calc(100vw - 24px));
+  max-height: calc(100vh - 72px); overflow-y: auto;
+  --tp-base-background-color: color-mix(in srgb, var(--background) 88%, transparent);
+  --tp-base-shadow-color: transparent;
+  --tp-base-border-radius: 0;
+  --tp-base-font-family: var(--mono);
+  --tp-blade-border-radius: 0;
+  --tp-blade-value-width: 150px;
+  --tp-button-background-color: color-mix(in srgb, var(--text) 12%, transparent);
+  --tp-button-background-color-hover: color-mix(in srgb, var(--c1) 30%, transparent);
+  --tp-button-background-color-focus: color-mix(in srgb, var(--c1) 30%, transparent);
+  --tp-button-background-color-active: color-mix(in srgb, var(--c1) 45%, transparent);
+  --tp-button-foreground-color: var(--text);
+  --tp-container-background-color: color-mix(in srgb, var(--text) 6%, transparent);
+  --tp-container-background-color-hover: color-mix(in srgb, var(--text) 12%, transparent);
+  --tp-container-background-color-focus: color-mix(in srgb, var(--text) 12%, transparent);
+  --tp-container-background-color-active: color-mix(in srgb, var(--text) 18%, transparent);
+  --tp-container-foreground-color: var(--text);
+  --tp-input-background-color: color-mix(in srgb, var(--text) 8%, transparent);
+  --tp-input-background-color-hover: color-mix(in srgb, var(--text) 14%, transparent);
+  --tp-input-background-color-focus: color-mix(in srgb, var(--text) 14%, transparent);
+  --tp-input-background-color-active: color-mix(in srgb, var(--text) 20%, transparent);
+  --tp-input-foreground-color: var(--c1);
+  --tp-label-foreground-color: color-mix(in srgb, var(--text) 75%, transparent);
+  --tp-groove-foreground-color: color-mix(in srgb, var(--text) 10%, transparent);
+}
+/* Leaves the lower half to the diagnostics while they are open. */
+body:has(#panel:not([hidden])) #controls { max-height: calc(50vh - 12px); }
+
+/* Diagnostics, on the D key: bottom right, above the status line. */
+#panel {
+  position: fixed; bottom: 60px; right: 12px; width: min(560px, calc(100vw - 24px)); font-size: 12px;
+  max-height: calc(50vh - 66px); overflow-y: auto;
+  padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--text) 25%, transparent);
+  background: color-mix(in srgb, var(--background) 86%, transparent); backdrop-filter: blur(6px);
+}
+#panel h2 { margin: 0 0 8px; font-size: inherit; font-weight: 400; opacity: 0.7; }
+#panel .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+#panel button { padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--text) 45%, transparent); }
+#panel button:hover:not(:disabled), #panel button:focus-visible { border-color: var(--c1); color: var(--c1); outline: none; }
+#panel button:disabled { opacity: 0.35; cursor: default; }
+#panel label { display: inline-flex; gap: 4px; align-items: center; opacity: 0.8; }
+#meter { height: 3px; margin: 8px 0 6px; background: color-mix(in srgb, var(--text) 15%, transparent); }
+#level { height: 100%; width: 0; background: var(--c1); }
+#panel pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+#log { margin-top: 8px; max-height: 15.5em; overflow-y: auto; opacity: 0.8; font-size: 11px; }
+
+@media (max-width: 520px) {
+  #intro { left: 8px; top: 8px; width: calc(100vw - 52px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #status { transition: none; }
+}
