@@ -5,6 +5,8 @@ export const LAG_TOLERANCE_SEC = 0.1;
 // The picture reads this far behind the freshest arrival, so it interpolates between
 // frames instead of stepping as messages land.
 export const READ_BEHIND_SEC = 0.006;
+// The most the picture may be held back to meet sound that is heard late.
+export const MOST_HOLD_SEC = 1;
 
 // Recent frames keyed by their position on the audio clock, and the mapping from the
 // page's clock to that one.
@@ -25,6 +27,10 @@ export class FrameRing {
     this.windowStart = 0;
     this.lateSum = 0;
     this.lateCount = 0;
+    // Seconds the picture reads behind the freshest sound. Sound the page plays itself is
+    // analysed on its way to the speakers and heard a little later; holding the picture
+    // back by that much lets the two meet.
+    this.hold = 0;
   }
 
   slot(i) {
@@ -63,7 +69,7 @@ export class FrameRing {
   read(t, out) {
     const width = this.width;
     if (this.count === 0 || t - this.lastArrival > STALE_SEC) return false;
-    const want = t - this.offset - READ_BEHIND_SEC;
+    const want = t - this.offset - READ_BEHIND_SEC - Math.min(Math.max(this.hold, 0), MOST_HOLD_SEC);
     if (this.positions[this.slot(this.count - 1)] < want - LAG_TOLERANCE_SEC) return false;
     // First frame after `want`; the one before it is at or before.
     let lo = 0;

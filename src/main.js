@@ -1,6 +1,6 @@
 import { Ridge } from './ridge/ridge.js';
 import { PARAMS } from './ridge/params.js';
-import { FrameRing } from './audio/frame-ring.js';
+import { FrameRing, MOST_HOLD_SEC } from './audio/frame-ring.js';
 import { createCapture } from './audio/capture.js';
 import { dropped, picked, title } from './audio/files.js';
 import { better, currentOf, isLoopback, plain } from './audio/inputs.js';
@@ -10,6 +10,7 @@ import { detect, named, offerFor } from './ways.js';
 import { createPoster } from './ui/poster.js';
 import { createStatus } from './ui/status.js';
 import { createInputs } from './ui/inputs.js';
+import { createTransport } from './ui/transport.js';
 import { createDiagnostics } from './ui/diagnostics.js';
 import { createStage } from './scene/stage.js';
 import { HistoryRows } from './scene/history-rows.js';
@@ -36,6 +37,8 @@ const TO_COVER_SECONDS = 1.4;
 // has arrived for this long, in ms.
 const SILENT_PEAK = 0.001;
 const PAUSE_AFTER_MS = 1000;
+// How far an arrow key moves through a file.
+const SEEK_STEP_SEC = 10;
 // World height the cover allows for peaks above its back row, for the poster's shape.
 const PEAK_ROOM = 1.5;
 
@@ -158,8 +161,10 @@ const intro = createIntro({
 });
 const status = createStatus({ onToggle: () => startOrStop() });
 const inputs = createInputs({ onPick: (input) => switchTo(input) });
+const transport = createTransport({ onSeek: (seconds) => capture.seek(seconds) });
 // The keys that belong to one kind of source, shown only while it plays.
 let nextKey = null;
+let backKey = null;
 let inputKey = null;
 createPoster({ onPrompt: () => openIntro() });
 const diagnostics = createDiagnostics({
@@ -228,11 +233,33 @@ function toStopped(notice = '') {
   if (notice) status.hint(notice);
 }
 
-// The keys for the next file and for choosing an input show while they have something to do.
+// Whether the visitor's own files are up: playing, or paused with some still in line.
+function filesUp() {
+  const view = document.body.dataset.view;
+  return (view === 'live' && capture.kind === 'files') || (view === 'stopped' && startRoute === 'files' && capture.queued > 0);
+}
+
+// The keys for the next file, the one before and for choosing an input show while they
+// have something to do, and the seek bar while files are up.
 function showSourceKeys() {
   const live = document.body.dataset.view === 'live';
   if (nextKey) nextKey.hidden = !(live && capture.kind === 'files' && capture.queued > 1);
+  if (backKey) backKey.hidden = !(live && capture.kind === 'files');
   if (inputKey) inputKey.hidden = !(live && capture.kind === 'microphone');
+  document.body.classList.toggle('files', filesUp());
+  showProgress();
+}
+
+function showProgress() {
+  transport.update(filesUp() ? capture.progress : null);
+}
+
+// Moves the file that is up by `seconds`, forwards or back.
+function seekBy(seconds) {
+  const now = filesUp() && capture.progress;
+  if (!now) return;
+  capture.seek(now.time + seconds);
+  showProgress();
 }
 
 function startOrStop() {
@@ -590,6 +617,9 @@ function fullScreen() {
 // ---- frames --------------------------------------------------------------------------
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+// How fast the hold on the picture moves to a new value, in seconds of hold a second.
+const HOLD_EASE = 0.5;
+let lastStamp = 0;
 
 function frame(stamp) {
   const idle = capture.kind === 'none';
@@ -599,6 +629,13 @@ function frame(stamp) {
   // The made-up signal is only for show: hold it still for reduced motion. What is real
   // holds still through silence when asked to.
   const held = made ? reducedMotion.matches : values.pause && stamp - heardAt > PAUSE_AFTER_MS;
+  // The picture is held back to meet sound that is heard after it is analysed, easing to
+  // a new delay so that a change of speakers does not make it jump.
+  const heardAfter = capture.heardAfter;
+  const hold = Math.min(Math.max(heardAfter + (heardAfter > 0 ? values.sync / 1000 : 0), 0), MOST_HOLD_SEC);
+  const step = Math.max(stamp - lastStamp, 0) / 1000;
+  lastStamp = stamp;
+  ring.hold += Math.min(Math.max(hold - ring.hold, -step * HOLD_EASE), step * HOLD_EASE);
   if (!held) ridge.advance(stamp / 1000, made ? demo : idle ? quiet : ring);
   if (staleLook) applyLook();
   if (staleFilters) applyFilters();
@@ -629,6 +666,8 @@ function showStats() {
     lateMs: ring.takeLateness(),
     kind: capture.kind,
     sampleRate: capture.context ? capture.context.sampleRate : 0,
+    holdMs: ring.hold * 1000,
+    heardAfterMs: capture.heardAfter * 1000,
   });
 
   // A share that delivers nothing but zeros gets a line of direction.
@@ -730,10 +769,21 @@ function start() {
   pauseKey.setAttribute('aria-pressed', String(values.pause));
   status.addKey('p', 'options', toggleOptions);
   status.addKey('o', 'open files', openPicker);
+  backKey = status.addKey('b', 'back', () => capture.previousFile());
   nextKey = status.addKey('n', 'next', () => capture.nextFile());
   inputKey = status.addKey('i', 'input', chooseInput);
   showSourceKeys();
 
+  // The arrow keys move through a file, and keep moving while held.
+  window.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || !filesUp()) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    // In a field or a list the arrows are the field's.
+    if (event.target.closest?.('textarea, input, select, [role="slider"]')) return;
+    event.preventDefault();
+    status.stir();
+    seekBy(event.key === 'ArrowLeft' ? -SEEK_STEP_SEC : SEEK_STEP_SEC);
+  });
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
     // Letters typed into a text or number field are the field's.
@@ -742,7 +792,7 @@ function start() {
     if (event.key === 'Escape' && document.body.dataset.view === 'intro') toCover();
     const key = event.key.toLowerCase();
     // A hotkey on a focused list replaces the list's own jump to a matching entry.
-    if (key.length === 1 && 'tgpfvdsqoni'.includes(key) && event.target instanceof HTMLSelectElement) {
+    if (key.length === 1 && 'tgpfvdsqonib'.includes(key) && event.target instanceof HTMLSelectElement) {
       event.preventDefault();
       event.target.blur();
     }
@@ -756,6 +806,7 @@ function start() {
     else if (key === 's') startOrStop();
     else if (key === 'o') openPicker();
     else if (key === 'n') capture.nextFile();
+    else if (key === 'b') capture.previousFile();
     else if (key === 'i') chooseInput();
   });
   window.addEventListener('pointermove', status.stir);
@@ -763,6 +814,7 @@ function start() {
     shared.pointer.value.set(event.clientX / window.innerWidth, event.clientY / window.innerHeight);
   });
   setInterval(showStats, 500);
+  setInterval(showProgress, 250);
   stage.renderer.setAnimationLoop(frame);
 
   // A hook for checking the page from a console.

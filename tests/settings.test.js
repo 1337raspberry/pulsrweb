@@ -7,8 +7,8 @@ import { findEntry } from '../src/looks/index.js';
 
 const byName = Object.fromEntries(SETTINGS.map((s) => [s.name, s]));
 
-test('the table has the 42 settings', () => {
-  expect(SETTINGS.length).toBe(42);
+test('the table has the 43 settings', () => {
+  expect(SETTINGS.length).toBe(43);
   expect(byName.peak).toMatchObject({ default: 0.25, min: 0.05, max: 1.5, step: 0.01, label: 'height', group: 'basic' });
   expect(byName.gamma).toMatchObject({ group: 'more', folder: 'music reactivity' });
   expect(byName.lineWidth).toMatchObject({ label: 'line width', group: 'more', folder: 'shape' });
@@ -18,6 +18,7 @@ test('the table has the 42 settings', () => {
   expect(SETTINGS.map((s) => s.name).slice(0, 3)).toEqual(['preset', 'palette', 'colours']);
   expect(SETTINGS.slice(0, 3).map((s) => s.label)).toEqual(['visual preset', 'palette', 'colours']);
   expect(byName.pause).toMatchObject({ kind: 'boolean', default: false, label: 'pause on silence', sticky: true });
+  expect(byName.sync).toMatchObject({ kind: 'number', default: 0, min: -300, max: 300, folder: 'motion', sticky: true });
 });
 
 test('every setting says what it does in one short line', () => {

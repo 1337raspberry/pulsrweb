@@ -83,6 +83,11 @@
 <menu id="inputs" hidden></menu>
 
 <footer id="status" hidden>
+  <div id="transport" hidden>
+    <span id="elapsed">0:00</span>
+    <input type="range" id="seek" min="0" max="1" step="1" value="0" aria-label="position in the file">
+    <span id="length">-:--</span>
+  </div>
   <span id="what"></span>
   <span id="hint" hidden></span>
   <button class="key" id="end"><b>s</b>stop sharing</button>

@@ -46,7 +46,7 @@ export function createDiagnostics({
   }
 
   // Shows the counts gathered since the last call.
-  function tick({ paints, frames, peak, lateMs, kind, sampleRate }) {
+  function tick({ paints, frames, peak, lateMs, kind, sampleRate, holdMs = 0, heardAfterMs = 0 }) {
     const now = performance.now();
     const span = (now - lastTick) / 1000;
     lastTick = now;
@@ -54,7 +54,9 @@ export function createDiagnostics({
       `source  ${kind}\n` +
       `paint   ${(paints / span).toFixed(0)} fps   analysis ${(frames / span).toFixed(0)} frames/s   ` +
       `arriving ${lateMs.toFixed(1)} ms late\n` +
-      `input   ${db(peak)}${sampleRate ? `   ${sampleRate} Hz` : ''}`;
+      `input   ${db(peak)}${sampleRate ? `   ${sampleRate} Hz` : ''}` +
+      // For sound the page plays itself: when the speakers play it, and how far the picture waits.
+      (heardAfterMs > 0 ? `\nheard   ${heardAfterMs.toFixed(0)} ms after analysis   picture held ${holdMs.toFixed(0)} ms` : '');
     $('level').style.width = `${Math.max(0, Math.min(1, 1 + (peak > 0 ? 20 * Math.log10(peak) : -90) / 60)) * 100}%`;
     refreshButtons();
   }

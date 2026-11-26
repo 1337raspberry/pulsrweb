@@ -63,6 +63,9 @@ export const SETTINGS = [
     { name: 'flow', kind: 'choice', default: FLOWS[0], label: 'flow', choices: FLOWS, ...more('motion') },
     // Holds the ridge still while nothing is heard. `sticky`: a change of preset leaves it be.
     { ...flag('pause', false, 'motion', 'pause on silence'), sticky: true },
+    // Milliseconds added to how far the picture is held back for files the page plays,
+    // for speakers that lag more or less than the browser reports.
+    { name: 'sync', kind: 'number', default: 0, min: -300, max: 300, step: 10, label: 'file sound sync', ...more('motion'), sticky: true },
     ['lineWidth', 1.4, 0.5, 6, 0.05, 'shape', 'line width'],
     ['spread', 1, 0, 4, 0.1, 'shape'],
     ['smooth', 0.1, 0, 0.6, 0.01, 'shape'],
@@ -116,6 +119,7 @@ const HELP = {
   rising: 'the newest line slides in from the front instead of starting in place',
   flow: 'which way the lines travel: away from you, or towards you as if flying forwards',
   pause: 'holds the picture still while nothing is playing',
+  sync: 'for your own files: moves the picture later (or earlier) to line up with the sound, in ms',
   lineWidth: 'how thick the lines are',
   spread: 'how far each peak bleeds into its neighbours, making peaks wider',
   smooth: 'rounds off sharp corners along a line',

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { FrameRing, LAG_TOLERANCE_SEC, READ_BEHIND_SEC, STALE_SEC } from '../src/audio/frame-ring.js';
+import { FrameRing, LAG_TOLERANCE_SEC, MOST_HOLD_SEC, READ_BEHIND_SEC, STALE_SEC } from '../src/audio/frame-ring.js';
 
 const WIDTH = 128;
 const RATE = 240;
@@ -23,6 +23,25 @@ describe('FrameRing', () => {
     const out = new Float32Array(WIDTH);
     expect(ring.read(5.0 + READ_BEHIND_SEC + 0.5 / RATE, out)).toBe(true);
     for (const value of out) expect(Math.abs(value - 0.5)).toBeLessThan(0.02);
+  });
+
+  test('a held read gives the frame from that long before, up to the most allowed', () => {
+    const ring = new FrameRing(WIDTH, RATE, 2);
+    // A ramp: each frame's value is its audio position.
+    for (let i = 0; i <= RATE * 1.5; i++) push(ring, 1 + i / RATE, 1 + i / RATE);
+    const out = new Float32Array(WIDTH);
+    const t = 2.5 + 4 + READ_BEHIND_SEC;
+    expect(ring.read(t, out)).toBe(true);
+    expect(out[0]).toBeCloseTo(2.5, 3);
+    ring.hold = 0.2;
+    expect(ring.read(t, out)).toBe(true);
+    expect(out[0]).toBeCloseTo(2.3, 3);
+    ring.hold = 5;
+    expect(ring.read(t, out)).toBe(true);
+    expect(out[0]).toBeCloseTo(2.5 - MOST_HOLD_SEC, 3);
+    ring.hold = -1;
+    expect(ring.read(t, out)).toBe(true);
+    expect(out[0]).toBeCloseTo(2.5, 3);
   });
 
   test('a read past the newest frame returns the newest', () => {

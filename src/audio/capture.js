@@ -57,6 +57,8 @@ const inputOptions = (deviceId) => ({
 
 // How long a start that no click led to waits for the browser to let sound run, in ms.
 const UNASKED_WAIT_MS = 250;
+// Going back within this long of a file's start goes to the file before; later, to its start.
+const RESTART_AFTER_SEC = 3;
 
 // Gets sound into the analyser worklet from a shared tab or screen, an input such as the
 // microphone, the visitor's own files or the built-in test signal. `onFrames` gets each
@@ -371,6 +373,28 @@ export function createCapture({ onFrames, onEnded, onTrack = () => {}, log }) {
     if (kind === 'files' && queue.length > 1) advance(1);
   }
 
+  // Back to the start of the file that is up, or from its first few seconds to the one before.
+  function previousFile() {
+    if (kind !== 'files') return;
+    if (player.element.currentTime > RESTART_AFTER_SEC || queue.length < 2) player.element.currentTime = 0;
+    else advance(-1);
+  }
+
+  // Where the file that is up has got to and how long it is, in seconds, or null with no
+  // file in line. The length is 0 until the browser has read it.
+  function progress() {
+    if (!player || queue.length === 0) return null;
+    const { currentTime, duration } = player.element;
+    return { time: currentTime || 0, duration: Number.isFinite(duration) ? duration : 0 };
+  }
+
+  // Moves to `seconds` into the file that is up, playing or paused.
+  function seek(seconds) {
+    const now = progress();
+    if (!now || now.duration === 0) return;
+    player.element.currentTime = Math.min(Math.max(seconds, 0), now.duration);
+  }
+
   // Called from a click: lets the sound run where the browser was holding it back.
   async function wake() {
     if (!context) return;
@@ -465,6 +489,8 @@ export function createCapture({ onFrames, onEnded, onTrack = () => {}, log }) {
     inputs,
     files,
     nextFile,
+    previousFile,
+    seek,
     wake,
     testSignal,
     stop,
@@ -483,6 +509,17 @@ export function createCapture({ onFrames, onEnded, onTrack = () => {}, log }) {
     // How many files are in line.
     get queued() {
       return queue.length;
+    },
+    get progress() {
+      return progress();
+    },
+    // Seconds between the analyser taking in a sound and the visitor hearing it. Sound the
+    // page plays itself is analysed on its way out and takes the context's latency to
+    // reach the speakers; captured sound has been heard by the time it gets here.
+    get heardAfter() {
+      if (!context || !(kind === 'files' || (kind === 'test signal' && audible))) return 0;
+      const total = (context.baseLatency || 0) + (context.outputLatency || 0);
+      return Number.isFinite(total) ? total : 0;
     },
     get context() {
       return context;

@@ -184,6 +184,20 @@ a.link { color: inherit; }
   padding: 4px 10px; background: color-mix(in srgb, var(--background) 88%, transparent);
   transition: opacity 0.4s;
 }
+/* The seek bar for the visitor's own files: a row of its own over the status line, a thin
+   rule filled up to where the file has got to. */
+#transport { flex: 0 0 100%; display: flex; align-items: center; gap: 1.5ch; padding-bottom: 3px; }
+#seek {
+  --at: 0%; --rule: color-mix(in srgb, var(--text) 40%, transparent);
+  flex: 0 1 52ch; min-width: 0; height: 16px; margin: 0; appearance: none; -webkit-appearance: none; cursor: pointer;
+  background: linear-gradient(to right, var(--c1) var(--at), var(--rule) var(--at)) center / 100% 2px no-repeat;
+}
+#seek:disabled { cursor: default; opacity: 0.5; }
+#seek::-webkit-slider-runnable-track { height: 16px; background: none; }
+#seek::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 9px; margin-top: 3.5px; border: 0; border-radius: 0; background: var(--c1); }
+#seek::-moz-range-track { height: 2px; background: none; }
+#seek::-moz-range-thumb { width: 9px; height: 9px; border: 0; border-radius: 0; background: var(--c1); }
+#seek:focus-visible { outline: 1px solid var(--c1); outline-offset: 2px; }
 /* A long file or input name is cut short rather than pushing the keys off the line. */
 #what { max-width: 56ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #hint { color: var(--c3); }
@@ -194,7 +208,9 @@ a.link { color: inherit; }
 body.resting[data-view="live"] { cursor: none; }
 body.resting[data-view="live"] #status:not(.hold) { opacity: 0; }
 /* Until the ridge has been handled the nudge has the floor, unless there is a hint to give. */
-body:not(.handled) #status:not(.hold) { display: none; }
+body:not(.handled):not(.files) #status:not(.hold) { display: none; }
+/* With files the line is up from the start, for the seek bar, and the nudge sits above it. */
+body.files #tips { bottom: 96px; }
 
 /* The control panel, in the page's colours. */
 #controls {
