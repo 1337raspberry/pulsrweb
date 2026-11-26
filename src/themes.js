@@ -1,6 +1,17 @@
-// Colour themes ported from pulsr. A gradient is three stops that colour a line by height.
+// Colour themes. The first is the page's own, white lines on black; the rest are ported
+// from pulsr. A gradient is three stops that colour a line by height.
 
 export const THEMES = [
+  {
+    name: 'division',
+    background: '#000000',
+    text: '#bbbbbb',
+    gradients: [
+      { name: 'white', stops: ['#ffffff', '#ffffff', '#ffffff'] },
+      { name: 'grey-white', stops: ['#808080', '#bbbbbb', '#ffffff'] },
+      { name: 'text', stops: ['#bbbbbb', '#bbbbbb', '#bbbbbb'] },
+    ],
+  },
   {
     name: 'greyscale',
     background: '#000000',

@@ -1,50 +1,81 @@
 // The settings table, and its encoding into a link fragment (the text after `#`).
+//
+// There are two sets of defaults. The table's own belong to the opening theme, which
+// draws the ridge as a record sleeve; under any other theme the settings in CLASSIC take
+// pulsr's own values instead.
 import { THEMES, findTheme } from './themes.js';
+
+export const OPENING_THEME = 'division';
 
 const num = (name, def, min, max, step, label = name, group = 'basic') => ({
   name, kind: 'number', default: def, min, max, step, label, group,
 });
 const more = (folder) => ({ group: 'more', folder });
 
+const flag = (name, def, folder) => ({ name, kind: 'boolean', default: def, label: name, ...more(folder) });
+
 export const SETTINGS = [
   {
-    name: 'theme', kind: 'choice', default: 'tokyo-night', label: 'theme', group: 'basic',
+    name: 'theme', kind: 'choice', default: OPENING_THEME, label: 'theme', group: 'basic',
     choices: THEMES.map((t) => t.name),
   },
   {
-    name: 'gradient', kind: 'choice', default: 'blue-red', label: 'gradient', group: 'basic',
+    name: 'gradient', kind: 'choice', default: 'white', label: 'gradient', group: 'basic',
     choicesFor: (themeName) => findTheme(themeName).gradients.map((g) => g.name),
   },
-  num('peak', 0.6, 0.1, 1.5, 0.01, 'height'),
-  num('speed', 30, 8, 80, 1), // rows per second; rowMs = 1000 / speed
-  num('rows', 51, 10, 120, 1, 'depth'),
-  num('lineWidth', 1.25, 0.5, 6, 0.05, 'line'),
+  num('peak', 0.25, 0.05, 1.5, 0.01, 'height'),
+  num('speed', 12, 2, 80, 1), // rows per second; rowMs = 1000 / speed
+  num('rows', 80, 10, 120, 1, 'depth'),
+  num('lineWidth', 1.4, 0.5, 6, 0.05, 'line'),
   ...[
     ['gamma', 4, 1, 8, 0.1, 'levels'],
     ['floorCut', 0.6, 0, 0.9, 0.01, 'levels'],
     ['gain', 1.15, 0.5, 3, 0.05, 'levels'],
     ['attack', 0.67, 0.05, 1, 0.01, 'motion'],
     ['decay', 0.5, 0.05, 1, 0.01, 'motion'],
+    flag('rising', false, 'motion'),
     ['spread', 1, 0, 4, 0.1, 'shape'],
     ['smooth', 0.1, 0, 0.6, 0.01, 'shape'],
     ['grain', 0.03, 0, 0.3, 0.01, 'shape'],
+    ['noise', 0.03, 0, 0.1, 0.005, 'shape'],
+    ['span', 0.7, 0.2, 1, 0.01, 'shape'],
     ['edgeTaper', 0.22, 0, 0.5, 0.01, 'shape'],
     ['axisCurve', 0.75, 0.4, 1.2, 0.01, 'shape'],
-    ['spacing', 0.38, 0.05, 0.6, 0.01, 'depth'],
-    ['depthScale', 0.39, 0.2, 1.5, 0.01, 'depth'],
-    ['fadeCurve', 0.75, 0.2, 3, 0.05, 'depth'],
-    ['alpha', 0.85, 0.1, 1, 0.01, 'depth'],
+    ['spacing', 0.3, 0.05, 0.6, 0.01, 'depth'],
+    ['depthScale', 1, 0.2, 1.5, 0.01, 'depth'],
+    ['fadeCurve', 0, 0, 3, 0.05, 'depth'],
+    ['alpha', 1, 0.1, 1, 0.01, 'depth'],
     ['fov', 30, 15, 75, 1, 'camera'],
-  ].flatMap(([name, def, min, max, step, folder]) => {
-    const s = { ...num(name, def, min, max, step), ...more(folder) };
-    return name === 'decay' ? [s, { name: 'rising', kind: 'boolean', default: false, label: 'rising', ...more('motion') }] : [s];
+    ['tilt', 40, 15, 75, 1, 'camera'], // degrees the front view looks down from
+    flag('drift', true, 'camera'),
+    // The made-up signal the cover plays: where its peaks stand and how they move.
+    ['demoSpread', 0.27, 0.05, 0.5, 0.01, 'cover', 'spread'],
+    ['demoPeaks', 7, 1, 16, 1, 'cover', 'peaks'],
+    ['demoHeight', 1, 0.2, 3, 0.05, 'cover', 'height'],
+    ['demoWidth', 1, 0.3, 3, 0.05, 'cover', 'width'],
+    ['demoRate', 13, 1, 30, 0.5, 'cover', 'rate'],
+    ['demoSparse', 3, 1, 6, 0.1, 'cover', 'sparse'],
+  ].map((entry) => {
+    if (!Array.isArray(entry)) return entry;
+    const [name, def, min, max, step, folder, label] = entry;
+    return { ...num(name, def, min, max, step, label), ...more(folder) };
   }),
 ];
 
+// pulsr's own look, which every theme but the opening one starts from.
+const CLASSIC = {
+  peak: 0.6, speed: 30, rows: 51, lineWidth: 1.25, noise: 0, span: 1,
+  spacing: 0.38, depthScale: 0.39, fadeCurve: 0.75, alpha: 0.85, tilt: 18,
+};
+
 const BY_NAME = new Map(SETTINGS.map((s) => [s.name, s]));
 
-export function defaults() {
-  return Object.fromEntries(SETTINGS.map((s) => [s.name, s.default]));
+// Every setting's default under `theme`. A theme other than the opening one comes with
+// its first gradient.
+export function defaults(theme = OPENING_THEME) {
+  const base = Object.fromEntries(SETTINGS.map((s) => [s.name, s.default]));
+  if (theme === OPENING_THEME) return base;
+  return { ...base, ...CLASSIC, theme, gradient: findTheme(theme).gradients[0].name };
 }
 
 const decimals = (step) => (String(step).split('.')[1] ?? '').length;
@@ -54,15 +85,16 @@ function writeValue(s, v) {
   return String(v);
 }
 
-// Fragment text without the `#`: settings that differ from their default, then the camera view.
-// Under a theme other than the default, the gradient is always written, since the default
-// gradient's name can belong to that theme too.
+// Fragment text without the `#`: the theme unless it is the opening one, the settings that
+// differ from that theme's defaults, then the camera view.
 export function encode(values, view) {
   const parts = [];
-  const otherTheme = values.theme !== undefined && values.theme !== BY_NAME.get('theme').default;
+  const theme = values.theme ?? OPENING_THEME;
+  const base = defaults(theme);
   for (const s of SETTINGS) {
     const v = values[s.name];
-    if (v === undefined || (v === s.default && !(s.name === 'gradient' && otherTheme))) continue;
+    if (v === undefined) continue;
+    if (s.name === 'theme' ? v === OPENING_THEME : v === base[s.name]) continue;
     parts.push(`${s.name}=${encodeURIComponent(writeValue(s, v))}`);
   }
   if (view) {

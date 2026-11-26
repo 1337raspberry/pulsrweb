@@ -1,5 +1,6 @@
 // The ridgeline: a stack of lines, each a past moment of the spectrum drawn as a profile
-// along a bent log frequency axis, bass on the left. Everything runs on time, not display
+// along a bent log frequency axis, bass on the left. The spectrum fills the middle `span`
+// of a row and the line runs on flat to either side. Everything runs on time, not display
 // frames, so the picture moves the same at any refresh rate.
 
 import { MAX_ROWS } from './params.js';
@@ -10,6 +11,8 @@ const MAX_STEP = 1 / 240;
 // A gap between two advances longer than this is a stall: the picture resumes where it stopped.
 const STALL = 0.25;
 const SILENCE = 1e-6;
+// The baseline noise changes value every this many points along a row.
+const NOISE_STEP = 3;
 
 // Share of the remaining distance a point moves in `dt` seconds, for an easing factor
 // given per 60 Hz frame.
@@ -37,8 +40,10 @@ export class Ridge {
     this.fineCount = fine;
     this.fine = new Float32Array(fine);
     this.grain = new Float32Array(fine);
+    this.noise = new Float32Array(fine);
     this.grained = new Float32Array(fine);
     this.axis = new Float32Array(fine);
+    this.taper = new Float32Array(fine);
     this.capacity = MAX_ROWS;
     this.history = new Float32Array(MAX_ROWS * fine);
     this.head = 0;
@@ -57,20 +62,35 @@ export class Ridge {
   // `oversample` fixes the point count, so it is read only at construction.
   setParams(partial) {
     const p = this.p;
-    const stale = ['axisCurve', 'spread'].some((k) => k in partial && partial[k] !== p[k]);
+    const stale = ['axisCurve', 'spread', 'span', 'edgeTaper'].some((k) => k in partial && partial[k] !== p[k]);
     Object.assign(p, partial);
     if (stale) this.buildTables();
   }
 
-  // The frequency axis and spread bell, derived from the params.
+  // The frequency axis, edge taper and spread bell, derived from the params.
   buildTables() {
-    const { axisCurve, spread } = this.p;
+    const { axisCurve, spread, edgeTaper } = this.p;
     const bands = this.bands;
     const fine = this.fineCount;
+    const span = Math.min(Math.max(this.p.span, 0.05), 1);
 
-    // Band position of each resampled point: below 1 the curve widens the low end.
+    // Band position of each resampled point, or -1 outside the spectrum's span: below 1
+    // the curve widens the low end. The taper is a raised cosine over the first and last
+    // `edgeTaper` of the span, 1 between.
     const inverse = axisCurve > 0 ? 1 / axisCurve : 1;
-    for (let j = 0; j < fine; j++) this.axis[j] = (j / (fine - 1)) ** inverse * (bands - 1);
+    const ramp = Math.max(edgeTaper, 1e-6);
+    for (let j = 0; j < fine; j++) {
+      const s = (j / (fine - 1) - (1 - span) / 2) / span;
+      if (s < -1e-9 || s > 1 + 1e-9) {
+        this.axis[j] = -1;
+        this.taper[j] = 0;
+        continue;
+      }
+      const within = Math.min(Math.max(s, 0), 1);
+      const fromEdge = Math.min(within, 1 - within);
+      this.axis[j] = within ** inverse * (bands - 1);
+      this.taper[j] = fromEdge >= edgeTaper ? 1 : 0.5 - 0.5 * Math.cos((Math.PI * fromEdge) / ramp);
+    }
 
     const radius = Math.min(bands - 1, Math.ceil(spread * 3));
     this.bell = new Float32Array(radius + 1);
@@ -84,8 +104,20 @@ export class Ridge {
     return this.history.subarray(i * this.fineCount, (i + 1) * this.fineCount);
   }
 
+  // Fresh grain for every point, and fresh baseline noise: random heights every few
+  // points joined by straight lines, so it reads as a wiggle rather than a blur.
   reroll() {
-    for (let i = 0; i < this.grain.length; i++) this.grain[i] = Math.random() * 2 - 1;
+    let from = Math.random();
+    let to = Math.random();
+    for (let i = 0; i < this.grain.length; i++) {
+      this.grain[i] = Math.random() * 2 - 1;
+      const along = i % NOISE_STEP;
+      if (along === 0 && i > 0) {
+        from = to;
+        to = Math.random();
+      }
+      this.noise[i] = from + ((to - from) * along) / NOISE_STEP;
+    }
   }
 
   // Brings the ridge up to `now` (seconds). `source.read(t, out)` fills one frame of
@@ -179,14 +211,15 @@ export class Ridge {
   }
 
   applyGrain() {
-    const amount = this.p.grain;
+    const { grain, noise } = this.p;
     for (let i = 0; i < this.fineCount; i++) {
-      this.grained[i] = Math.max(this.fine[i] * (1 + amount * this.grain[i]), 0);
+      this.grained[i] = Math.max(this.fine[i] * (1 + grain * this.grain[i]) + noise * this.noise[i], 0);
     }
   }
 
   // Resamples the eased levels onto the fine grid along a monotone cubic
-  // (Fritsch-Carlson), which never overshoots between neighbouring bands.
+  // (Fritsch-Carlson), which never overshoots between neighbouring bands. Points outside
+  // the spectrum's span are zero.
   resample() {
     const y = this.levels;
     const n = this.bands;
@@ -212,13 +245,18 @@ export class Ridge {
       }
     }
     for (let j = 0; j < this.fineCount; j++) {
-      const c = Math.min(Math.max(this.axis[j], 0), n - 1);
+      if (this.axis[j] < 0) {
+        this.fine[j] = 0;
+        continue;
+      }
+      const c = Math.min(this.axis[j], n - 1);
       const i = Math.min(Math.floor(c), n - 2);
       const t = c - i;
       const t2 = t * t;
       const t3 = t2 * t;
       this.fine[j] =
-        (2 * t3 - 3 * t2 + 1) * y[i] + (t3 - 2 * t2 + t) * m[i] + (-2 * t3 + 3 * t2) * y[i + 1] + (t3 - t2) * m[i + 1];
+        this.taper[j] *
+        ((2 * t3 - 3 * t2 + 1) * y[i] + (t3 - 2 * t2 + t) * m[i] + (-2 * t3 + 3 * t2) * y[i + 1] + (t3 - t2) * m[i + 1]);
     }
   }
 }

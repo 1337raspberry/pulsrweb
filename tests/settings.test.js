@@ -1,29 +1,53 @@
 import { expect, test } from 'vitest';
-import { SETTINGS, decode, defaults, encode } from '../src/settings.js';
-import { THEMES, findTheme } from '../src/themes.js';
+import { OPENING_THEME, SETTINGS, decode, defaults, encode } from '../src/settings.js';
+import { THEMES } from '../src/themes.js';
 
 const byName = Object.fromEntries(SETTINGS.map((s) => [s.name, s]));
 
-test('the table has the 22 settings', () => {
-  expect(SETTINGS.length).toBe(22);
-  expect(byName.peak).toMatchObject({ default: 0.6, min: 0.1, max: 1.5, step: 0.01, label: 'height', group: 'basic' });
+test('the table has the 32 settings', () => {
+  expect(SETTINGS.length).toBe(32);
+  expect(byName.peak).toMatchObject({ default: 0.25, min: 0.05, max: 1.5, step: 0.01, label: 'height', group: 'basic' });
   expect(byName.gamma).toMatchObject({ group: 'more', folder: 'levels' });
   expect(byName.rising).toMatchObject({ kind: 'boolean', default: false, folder: 'motion' });
+  expect(byName.drift).toMatchObject({ kind: 'boolean', default: true, folder: 'camera' });
+  expect(byName.demoSpread).toMatchObject({ default: 0.27, label: 'spread', group: 'more', folder: 'cover' });
+  expect(SETTINGS.map((s) => s.name).slice(0, 2)).toEqual(['theme', 'gradient']);
 });
 
 test('defaults encode to nothing', () => expect(encode(defaults(), null)).toBe(''));
 
+test('the opening theme has the sleeve’s defaults, and every other theme pulsr’s own', () => {
+  expect(OPENING_THEME).toBe('division');
+  expect(defaults()).toMatchObject({ theme: 'division', gradient: 'white', rows: 80, speed: 12, peak: 0.25, span: 0.7, fadeCurve: 0, tilt: 40 });
+  expect(defaults('nord')).toMatchObject({
+    theme: 'nord', gradient: 'frost', peak: 0.6, speed: 30, rows: 51, lineWidth: 1.25, noise: 0, span: 1,
+    spacing: 0.38, depthScale: 0.39, fadeCurve: 0.75, alpha: 0.85, tilt: 18,
+  });
+  // What the two share.
+  expect(defaults('nord').gamma).toBe(defaults().gamma);
+  expect(Object.keys(defaults('nord'))).toEqual(Object.keys(defaults()));
+});
+
+test('a link is written against its own theme’s defaults', () => {
+  expect(encode(defaults('nord'), null)).toBe('theme=nord');
+  expect(encode({ ...defaults('nord'), gradient: 'aurora', rows: 80 }, null)).toBe('theme=nord&gradient=aurora&rows=80');
+  // The sleeve's value for a setting is a change under another theme, and the other way round.
+  expect(encode({ ...defaults(), rows: 51 }, null)).toBe('rows=51');
+  const back = decode(encode({ ...defaults('nord'), peak: 0.9 }, null));
+  expect({ ...defaults(back.values.theme), ...back.values }).toEqual({ ...defaults('nord'), peak: 0.9 });
+});
+
 test('a look survives a round trip', () => {
-  const v = { ...defaults(), theme: 'nord', gradient: 'aurora', peak: 0.9, rows: 80, rising: true };
+  const v = { ...defaults('nord'), gradient: 'aurora', peak: 0.9, rows: 60, rising: true, drift: false };
   const view = { position: [1, 7.5, 22], target: [0, 1.5, -4] };
   const back = decode(encode(v, view));
-  expect({ ...defaults(), ...back.values }).toEqual(v);
+  expect({ ...defaults(back.values.theme), ...back.values }).toEqual(v);
   expect(back.view).toEqual(view);
 });
 
 test('numbers are written at their step’s precision', () => {
-  expect(encode({ ...defaults(), peak: 0.9, rows: 80, lineWidth: 2, gamma: 5 }, null))
-    .toBe('peak=0.90&rows=80&lineWidth=2.00&gamma=5.0');
+  expect(encode({ ...defaults(), peak: 0.9, rows: 60, lineWidth: 2, gamma: 5, noise: 0.05 }, null))
+    .toBe('peak=0.90&rows=60&lineWidth=2.00&gamma=5.0&noise=0.050');
 });
 
 test('every setting round-trips at a non-default value', () => {
@@ -65,8 +89,8 @@ test('a bad fragment yields defaults and never throws', () => {
 test('a gradient is checked against the fragment’s theme, else the default theme', () => {
   expect(decode('theme=nord&gradient=aurora').values).toEqual({ theme: 'nord', gradient: 'aurora' });
   expect(decode('gradient=aurora&theme=nord').values.gradient).toBe('aurora');
-  expect(decode('theme=nord&gradient=blue-red').values.gradient).toBeUndefined();
-  expect(decode('gradient=blue-red').values.gradient).toBe('blue-red');
+  expect(decode('theme=nord&gradient=grey-white').values.gradient).toBeUndefined();
+  expect(decode('gradient=grey-white').values.gradient).toBe('grey-white');
   expect(decode('gradient=aurora').values.gradient).toBeUndefined();
 });
 
@@ -108,9 +132,8 @@ test('a view coordinate a hair below zero is written as 0.00', () => {
 test('every theme and gradient pair survives a round trip', () => {
   for (const { name: theme, gradients } of THEMES) {
     for (const { name: gradient } of gradients) {
-      const { values } = decode(encode({ ...defaults(), theme, gradient }, null));
-      const back = { ...defaults(), ...values };
-      if (!('gradient' in values) && back.theme !== defaults().theme) back.gradient = findTheme(back.theme).gradients[0].name;
+      const { values } = decode(encode({ ...defaults(theme), gradient }, null));
+      const back = { ...defaults(values.theme), ...values };
       expect([back.theme, back.gradient]).toEqual([theme, gradient]);
     }
   }

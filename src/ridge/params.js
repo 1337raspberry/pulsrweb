@@ -7,9 +7,9 @@ export const MAX_ROWS = 120;
 const d = defaults();
 
 export const PARAMS = {
-  oversample: 5,
+  oversample: 8,
   rowMs: 1000 / d.speed,
   ...Object.fromEntries(
-    ['spread', 'smooth', 'grain', 'attack', 'decay', 'gamma', 'floorCut', 'gain', 'axisCurve'].map((name) => [name, d[name]]),
+    ['spread', 'smooth', 'grain', 'noise', 'span', 'edgeTaper', 'attack', 'decay', 'gamma', 'floorCut', 'gain', 'axisCurve'].map((name) => [name, d[name]]),
   ),
 };

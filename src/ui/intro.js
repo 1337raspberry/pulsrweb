@@ -7,37 +7,35 @@ const GUIDES = {
     chosen: 0,
     row: 'The tab your music is in',
     audio: 'Share with tab audio',
-    steps: ['Pick the tab your music is in.', 'Leave “Share with tab audio” on.', 'Press “Share with audio”.'],
+    lead: 'when you’re ready, click share, then pick the tab your music is in and click “Share with audio”',
+    steps: ['pick the tab your music is in', 'leave “Share with tab audio” on', 'click “Share with audio”'],
     note: '',
-    lede: 'Your music as a ridge of lines. Play something in another tab, then share that tab here.',
-    action: 'Share a tab',
-    other: 'share everything this computer plays',
   },
   screen: {
     panes: ['Chrome tab', 'Window', 'Entire screen'],
     chosen: 2,
     row: 'Your screen',
     audio: 'Share with system audio',
-    steps: ['Pick “Entire screen”, then your screen.', 'Switch on the audio along the bottom. It starts off.', 'Press “Share with audio”.'],
+    lead: 'when you’re ready, click share, then pick your whole screen, switch its audio on and click “Share with audio”',
+    steps: ['pick “Entire screen”, then your screen', 'switch on the audio along the bottom; it starts off', 'click “Share with audio”'],
     note: 'A Mac asks once for permission in System Settings, and Chrome may need a restart afterwards.',
-    lede: 'Your music as a ridge of lines. Play something on this computer, then share its sound here.',
-    action: 'Share this computer’s sound',
-    other: 'share one tab',
   },
 };
 
-// The opening text: what pulsr is, a picture of the browser's picker, and the buttons
-// that start a share. `onStart(route)` gets 'tab', 'screen' or 'mic'.
-export function createIntro({ canShare, onStart }) {
-  // The way of sharing the text describes and its main button starts.
+// The introduction: three steps, one on screen at a time. The first says what pulsr is
+// and its button leads to "go and play something", "ready" leads to a picture of the
+// browser's picker, and "share" opens the real one. The later steps show only their own
+// words. `onStart(route)` gets 'tab', 'screen' or 'mic'; `onClose()` is called when the
+// visitor backs out.
+export function createIntro({ canShare, onStart, onClose }) {
+  // The way of sharing the picture describes and the share button starts.
   let chosen = 'tab';
+  let step = 1;
 
   function showGuide(route) {
     const guide = GUIDES[route];
     chosen = route;
-    $('lede').textContent = guide.lede;
-    $('start').textContent = guide.action;
-    $('everything').textContent = guide.other;
+    $('lead').textContent = guide.lead;
     // The mock of the picker: its panes, the row to pick and the audio switch.
     $('m-panes').replaceChildren(
       ...guide.panes.map((name, i) => {
@@ -60,21 +58,32 @@ export function createIntro({ canShare, onStart }) {
     $('note').hidden = !guide.note;
   }
 
-  function setBusy(busy) {
-    for (const id of ['start', 'everything', 'usemic', 'micfirst']) $(id).disabled = busy;
+  function setStep(n) {
+    step = n;
+    for (const i of [1, 2, 3]) $(`step${i}`).hidden = !canShare || i !== n;
+    for (const id of ['about', 'terminal']) $(id).hidden = canShare && n !== 1;
+    const button = $(`step${n}`).querySelector('button');
+    if (canShare && !$('intro').hidden) button.focus({ preventScroll: true });
   }
 
-  function show(notice = '') {
+  function setBusy(busy) {
+    for (const id of ['start', 'ready', 'sharenow', 'usemic']) $(id).disabled = busy;
+  }
+
+  // Opens at `at`, or where it was left. `notice` is a line about what just went wrong.
+  function open({ notice = '', at = step } = {}) {
     $('intro').hidden = false;
     $('notice').textContent = notice;
     $('notice').hidden = !notice;
     setBusy(false);
+    setStep(at);
   }
 
-  // Shows only the lede and `notice`, with no way to start: for when nothing can be drawn.
+  // Shows only the opening words and `notice`, with no way to start: for when nothing can be drawn.
   function fail(notice) {
-    show(notice);
-    for (const id of ['start', 'guide', 'others', 'fallback']) $(id).closest('p, div').hidden = true;
+    open({ notice });
+    for (const id of ['step1', 'step2', 'step3', 'fallback', 'terminal']) $(id).hidden = true;
+    $('about').hidden = false;
   }
 
   function hide() {
@@ -104,19 +113,20 @@ export function createIntro({ canShare, onStart }) {
     return result.error ? `That did not work: ${result.error.message}` : 'That did not work.';
   }
 
-  $('start').addEventListener('click', () => onStart(chosen));
-  $('everything').addEventListener('click', () => onStart(chosen === 'tab' ? 'screen' : 'tab'));
+  $('start').addEventListener('click', () => {
+    showGuide('tab');
+    setStep(2);
+  });
+  $('ready').addEventListener('click', () => setStep(3));
+  $('sharenow').addEventListener('click', () => onStart(chosen));
   $('usemic').addEventListener('click', () => onStart('mic'));
-  $('micfirst').addEventListener('click', () => onStart('mic'));
+  $('back').addEventListener('click', () => onClose());
 
   $('m-site').textContent = location.host;
   showGuide('tab');
-  if (!canShare) {
-    // Without tab sharing, the microphone is the one way in.
-    for (const id of ['start', 'guide', 'others']) $(id).closest('p, div').hidden = true;
-    $('fallback').hidden = false;
-    $('lede').textContent = 'Your music as a ridge of lines.';
-  }
+  // Without tab sharing, the microphone is the one way in.
+  $('fallback').hidden = canShare;
+  setStep(1);
 
-  return { show, hide, fail, setBusy, showGuide, explain };
+  return { open, hide, fail, setBusy, showGuide, explain };
 }

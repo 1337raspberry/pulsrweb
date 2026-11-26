@@ -60,3 +60,39 @@ test('setParams rebuilds tables only when their inputs change', () => {
   r.setParams({ spread: 2 });
   expect(r.bell).not.toBe(bell);
 });
+
+test('the spectrum fills the middle of a row and the taper closes its ends', () => {
+  const r = new Ridge({ ...PARAMS, span: 0.5, edgeTaper: 0.2, noise: 0, grain: 0 });
+  run(r, 1, steady(1));
+  const row = r.historyRow(0);
+  const at = (along) => row[Math.round(along * (r.fineCount - 1))];
+  expect(at(0.1)).toBe(0);
+  expect(at(0.9)).toBe(0);
+  expect(at(0.5)).toBeGreaterThan(0.9);
+  // Half way up the taper, which covers the first fifth of the span.
+  expect(at(0.25 + 0.05)).toBeGreaterThan(0.3);
+  expect(at(0.25 + 0.05)).toBeLessThan(0.7);
+});
+
+test('a span of one uses the whole row', () => {
+  const r = new Ridge({ ...PARAMS, span: 1, edgeTaper: 0, noise: 0, grain: 0 });
+  run(r, 1, steady(1));
+  expect(Math.min(...r.historyRow(0))).toBeGreaterThan(0.9);
+});
+
+test('noise lifts a silent row a little and never below zero', () => {
+  const r = new Ridge({ ...PARAMS, noise: 0.05 });
+  run(r, 1, silent);
+  const row = r.historyRow(0);
+  expect(Math.max(...row)).toBeGreaterThan(0);
+  expect(Math.max(...row)).toBeLessThanOrEqual(0.05);
+  expect(Math.min(...row)).toBeGreaterThanOrEqual(0);
+  expect(r.peak).toBe(0);
+});
+
+test('changing the span rebuilds the axis', () => {
+  const r = new Ridge({ ...PARAMS });
+  const axis = r.axis.slice();
+  r.setParams({ span: 0.8 });
+  expect(Array.from(r.axis)).not.toEqual(Array.from(axis));
+});

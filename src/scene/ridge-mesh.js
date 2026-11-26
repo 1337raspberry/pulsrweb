@@ -15,11 +15,9 @@ import {
   RedFormat,
 } from 'three/webgpu';
 import {
-  PI,
   cameraProjectionMatrix,
   cameraViewMatrix,
   clamp,
-  cos,
   float,
   instanceIndex,
   int,
@@ -43,7 +41,7 @@ import {
 import { MAX_ROWS } from '../ridge/params.js';
 
 // World width of a row; heights are `peak` times this scale.
-const WIDTH = 16;
+export const WIDTH = 16;
 const HEIGHT = 10;
 // Share of a row's full rise that reaches the last gradient stop.
 const GRADIENT_TOP = 0.6;
@@ -51,7 +49,7 @@ const GRADIENT_TOP = 0.6;
 // until it has moved this share of a row back, so the two never fight for depth.
 const EMERGE = 0.1;
 
-const VALUE_UNIFORMS = ['rows', 'peak', 'lineWidth', 'spacing', 'depthScale', 'fadeCurve', 'alpha', 'edgeTaper'];
+const VALUE_UNIFORMS = ['rows', 'peak', 'lineWidth', 'spacing', 'depthScale', 'fadeCurve', 'alpha'];
 
 export function createRidgeMesh({ history, resolution, pixelRatio }) {
   const points = history.width;
@@ -79,25 +77,20 @@ export function createRidgeMesh({ history, resolution, pixelRatio }) {
   const shown = rising.greaterThan(0.5).or(k.notEqual(1)).or(phase.greaterThanEqual(EMERGE));
   const rise = u.peak.mul(HEIGHT).mul(u.depthScale.sub(1).mul(fade).add(1));
 
-  // Raised cosine over the first and last `edgeTaper` of the width, 1 between.
-  const taperAt = (along) => {
-    const fromEdge = min(along, along.oneMinus());
-    const ramp = max(u.edgeTaper, 1e-6);
-    return select(fromEdge.greaterThanEqual(u.edgeTaper), float(1), cos(PI.mul(fromEdge).div(ramp)).mul(-0.5).add(0.5));
-  };
-  const levelAt = (index) => textureLoad(texture, ivec2(index, textureRow)).x;
   const alongAt = (index) => float(index).div(points - 1);
-  // Tapered level of point `index` and its world position on the row's top edge.
-  const shapeAt = (index) => levelAt(index).mul(taperAt(alongAt(index)));
+  // Level of point `index` and its world position on the row's top edge.
+  const shapeAt = (index) => textureLoad(texture, ivec2(index, textureRow)).x;
   const topAt = (index) => vec3(alongAt(index).sub(0.5).mul(WIDTH), shapeAt(index).mul(rise), z);
 
   const index = int(round(positionGeometry.x.add(0.5).mul(points - 1)));
   const shape = shapeAt(index);
 
   // Height through the three stops in two halves, then toward the background with depth.
+  // The last row fades out over its final step back, so it never leaves in one frame.
   const lineColour = (() => {
     const t = varying(clamp(shape.div(GRADIENT_TOP), 0, 1));
-    const a = varying(u.alpha.mul(fade.oneMinus().pow(u.fadeCurve)));
+    const leaving = clamp(u.rows.sub(1).sub(depth), 0, 1);
+    const a = varying(u.alpha.mul(max(fade.oneMinus(), 1e-4).pow(u.fadeCurve)).mul(leaving));
     const low = mix(stops[0], stops[1], t.mul(2));
     const high = mix(stops[1], stops[2], t.mul(2).sub(1));
     return mix(background, select(t.lessThan(0.5), low, high), a);

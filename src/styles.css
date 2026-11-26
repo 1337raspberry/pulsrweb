@@ -1,6 +1,9 @@
 :root {
-  --background: #1a1b26; --text: #a9b1d6; --c1: #7aa2f7; --c2: #bb9af7; --c3: #f7768e;
+  --background: #000000; --text: #bbbbbb; --c1: #ffffff; --c2: #ffffff; --c3: #ffffff;
   --mono: "Berkeley Mono", "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --sans: "Helvetica Neue", Helvetica, "Nimbus Sans", Arial, sans-serif;
+  /* Width of the square the ridge fills; the page sets it from the window. */
+  --poster: 62vh;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--background); color: var(--text); overflow: hidden; }
@@ -12,30 +15,77 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 p { margin: 0; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 
-/* The opening text: one size throughout, as in a terminal. */
-#intro {
-  position: fixed; top: 24px; left: 28px; box-sizing: content-box; width: min(47ch, calc(100vw - 68px));
-  padding: 14px 18px 16px; background: color-mix(in srgb, var(--background) 90%, transparent);
-  max-height: calc(100vh - 48px); overflow-y: auto;
+/* The poster: large type above and below the ridge, set to its width like a record sleeve. */
+#poster {
+  position: fixed; left: 50%; top: 50%; width: var(--poster); height: calc(var(--poster) * var(--poster-ratio, 1.02));
+  transform: translate(-50%, -50%); pointer-events: none; color: var(--c1);
+  font-family: var(--sans); font-weight: 300; transition: opacity 0.4s, visibility 0s;
 }
-#intro h1 { margin: 0; font-size: inherit; font-weight: 700; color: var(--c1); }
-#intro h1::before { content: "$ "; font-weight: 400; color: var(--text); opacity: 0.5; }
-#lede { max-width: 44ch; }
-#notice { margin-top: 1.55em; color: var(--c3); }
-.act { margin-top: 1.55em; }
-.go { font-weight: 700; color: var(--c1); padding: 2px 0; }
-.go::before { content: "[ "; }
-.go::after { content: " ]"; }
-.go:hover, .go:focus-visible { background: var(--c1); color: var(--background); outline: none; }
-.go:disabled { opacity: 0.45; cursor: default; background: none; color: var(--c1); }
-#guide { margin-top: 1.55em; }
+/* The line box is trimmed to the capitals, so the gaps to the ridge are the margins. */
+#title {
+  position: absolute; left: 0; right: 0; bottom: 100%; margin: 0 0 calc(var(--poster) * 0.06);
+  display: flex; justify-content: space-between; font-size: calc(var(--poster) * 0.17); font-weight: 300; line-height: 0.72;
+}
+#title span { animation: appear 0.7s both; }
+#prompt {
+  position: absolute; left: 0; top: 100%; margin-top: calc(var(--poster) * 0.045); pointer-events: auto;
+  white-space: nowrap; line-height: 1; font-weight: 300;
+  text-decoration: underline; text-decoration-thickness: 0.045em; text-underline-offset: 0.14em;
+}
+#prompt:hover, #prompt:focus-visible { background: var(--c1); color: var(--background); text-decoration-color: transparent; outline: none; }
+/* Away from the sleeve the ridge runs behind the prompt, which stands on a plate of the
+   background so it stays readable. */
+body:not(.sleeve) #prompt { background: var(--background); box-shadow: 0 0 0 0.28em var(--background); }
+body:not(.sleeve) #prompt:hover, body:not(.sleeve) #prompt:focus-visible { background: var(--c1); box-shadow: 0 0 0 0.28em var(--c1); }
+/* The type belongs to the cover: it goes as soon as anything else is up. */
+body:not([data-view="cover"]) #poster { opacity: 0; visibility: hidden; transition: opacity 0.4s, visibility 0s 0.4s; }
+
+/* While live: a quiet line of tips under the ridge. It makes way for the options, and once
+   the camera has been moved it shows only while the pointer does. */
+#tips {
+  position: fixed; left: 0; right: 0; bottom: 22px; padding: 0 16px; text-align: center; pointer-events: none;
+  font-size: 12px; color: var(--text); opacity: 0; transition: opacity 0.6s;
+}
+body[data-view="live"] #tips { opacity: 0.55; transition: opacity 1.2s 1.5s; }
+body[data-view="live"].options #tips, body[data-view="live"].resting.handled #tips { opacity: 0; transition: opacity 0.4s; }
+
+/* The introduction: a page of its own, with the ridge still moving faintly behind it. */
+#intro {
+  position: fixed; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 56px 24px 32px;
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  font: 300 17px/1.5 var(--sans); color: var(--c1); animation: appear 0.35s both;
+}
+#card { width: min(31rem, 100%); text-align: center; }
+#card h2 { margin: 0 0 0.35em; font-size: clamp(3.5rem, 11vw, 6rem); font-weight: 300; line-height: 0.9; }
+#lede { max-width: 26em; margin: 0 auto; text-wrap: balance; }
+#notice { margin: 1.6em auto 0; max-width: 28em; padding: 0.6em 0.9em; border: 1px solid currentColor; font-size: 0.9em; }
+#back { position: absolute; top: 20px; left: 24px; font-size: 0.9em; }
+.step { margin-top: 2.2em; animation: arrive 0.6s both; }
+.step > p { max-width: 24em; margin: 0 auto; text-wrap: balance; }
+.step > p + .cta { margin-top: 1.4em; }
+
+/* The call to action: a solid block with a sheen passing over it, and on the first one a
+   slow pulse of light around it. */
+.cta {
+  position: relative; overflow: hidden; padding: 0.72em 2.1em 0.78em; font-size: 1.3em; font-weight: 400;
+  background: var(--c1); color: var(--background); transition: transform 0.15s;
+}
+.cta::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 38%, color-mix(in srgb, var(--background) 45%, transparent) 50%, transparent 62%);
+  transform: translateX(-100%); animation: sheen 2.6s ease-in-out infinite;
+}
+.cta.glow { animation: glow 2.6s ease-in-out infinite; }
+.cta:hover:not(:disabled), .cta:focus-visible { transform: scale(1.04); outline: 1px solid var(--c1); outline-offset: 4px; }
+.cta:active:not(:disabled) { transform: scale(0.98); }
+.cta:disabled { opacity: 0.45; cursor: default; }
 
 /* A small picture of the browser's own share box, in its colours rather than the page's,
    with the three things to do in it numbered. */
 #mock {
-  position: relative; margin: 0.8em 14px 1.1em 0; padding: 12px 12px 10px; border-radius: 10px;
-  background: #1e1f23; color: #e3e3e8; font: 10.5px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  position: relative; margin: 1.5em auto 1em; padding: 12px 12px 10px; border-radius: 10px; max-width: 25rem; text-align: left;
+  background: #1e1f23; color: #e3e3e8; font: 400 10.5px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 0 0 1px #3c3e45, 0 6px 24px rgb(0 0 0 / 0.35);
 }
 #mock .m-title { font-size: 12px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #m-panes { display: flex; border-bottom: 1px solid #3c3e45; }
@@ -53,33 +103,38 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .m-audio-row { padding: 0 8px 8px; background: #282a30; border-radius: 0 0 8px 8px; }
 .m-audio {
   position: relative; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px;
-  border: 1px solid #5c5f68; outline: 2px solid var(--c2); outline-offset: 1px;
+  border: 1px solid #5c5f68; outline: 2px solid var(--c1); outline-offset: 1px;
 }
 .m-audio svg { width: 12px; height: 12px; fill: #c4c6cf; flex: none; }
 .m-switch { margin-left: auto; width: 22px; height: 12px; border-radius: 6px; background: #a8c7fa; position: relative; flex: none; }
 .m-switch::after { content: ""; position: absolute; right: 2px; top: 2px; width: 8px; height: 8px; border-radius: 50%; background: #062e6f; }
 .m-buttons { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
 .m-buttons span { position: relative; padding: 4px 11px; border-radius: 999px; background: #24427a; color: #d3e3fd; }
-.m-buttons .m-share { background: #a8c7fa; color: #062e6f; outline: 2px solid var(--c3); outline-offset: 1px; }
+.m-buttons .m-share { background: #a8c7fa; color: #062e6f; outline: 2px solid var(--c1); outline-offset: 1px; }
 #mock .n {
   position: absolute; right: -9px; top: -9px; width: 17px; height: 17px; border-radius: 50%;
-  display: grid; place-items: center; font: 700 10px/1 system-ui, sans-serif; color: var(--background);
+  display: grid; place-items: center; font: 700 10px/1 system-ui, sans-serif; background: var(--c1); color: var(--background);
 }
-#mock .n1 { background: var(--c1); }
-#mock .n2 { background: var(--c2); }
-#mock .n3 { background: var(--c3); }
-#steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
-#steps li { counter-increment: step; padding-left: 3ch; text-indent: -3ch; }
-#steps li::before { content: counter(step) "  "; font-weight: 700; }
-#steps li:nth-child(1)::before { color: var(--c1); }
-#steps li:nth-child(2)::before { color: var(--c2); }
-#steps li:nth-child(3)::before { color: var(--c3); }
-#note { margin-top: 0.8em; opacity: 0.75; }
-#others { margin-top: 1.55em; opacity: 0.85; }
-#terminal { margin-top: 0.8em; opacity: 0.85; }
+#steps {
+  margin: 0 auto 1.6em; padding: 0; max-width: 25rem; list-style: none; counter-reset: step;
+  text-align: left; font-size: 0.82em;
+}
+#steps li { counter-increment: step; padding-left: 1.6em; text-indent: -1.6em; }
+#steps li::before { content: counter(step); display: inline-block; width: 1.6em; text-indent: 0; font-weight: 400; }
+#note { margin: -0.8em auto 1.6em; max-width: 25rem; text-align: left; font-size: 0.82em; opacity: 0.7; }
+#fallback { margin-top: 2.2em; }
+#terminal { margin-top: 2.6em; font-size: 0.82em; opacity: 0.6; }
 a.link { color: inherit; }
-.link { text-decoration: underline; text-underline-offset: 3px; }
-.link:hover, .link:focus-visible, a.link:hover, a.link:focus-visible { color: var(--c1); outline: none; }
+.link { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.link:hover, .link:focus-visible, a.link:hover, a.link:focus-visible { background: var(--c1); color: var(--background); outline: none; }
+
+@keyframes appear { from { opacity: 0; } }
+@keyframes arrive { from { opacity: 0; transform: translateY(10px); } }
+@keyframes sheen { 0%, 35% { transform: translateX(-100%); } 85%, 100% { transform: translateX(100%); } }
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c1) 55%, transparent), 0 0 18px 0 color-mix(in srgb, var(--c1) 35%, transparent); }
+  55% { box-shadow: 0 0 0 14px transparent, 0 0 46px 6px color-mix(in srgb, var(--c1) 45%, transparent); }
+}
 
 /* While listening: one line of status and keys that fades when the pointer rests. */
 #status {
@@ -142,9 +197,8 @@ body:has(#panel:not([hidden])) #controls { max-height: calc(50vh - 12px); }
 #panel pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 #log { margin-top: 8px; max-height: 15.5em; overflow-y: auto; opacity: 0.8; font-size: 11px; }
 
-@media (max-width: 520px) {
-  #intro { left: 8px; top: 8px; width: calc(100vw - 52px); }
-}
 @media (prefers-reduced-motion: reduce) {
-  #status { transition: none; }
+  #status, #poster, .cta { transition: none; }
+  #intro, #title span, .step, .cta.glow { animation: none; }
+  .cta::after { display: none; }
 }

@@ -6,41 +6,56 @@
 <title>pulsr</title>
 <link rel="stylesheet" href="/src/styles.css">
 </head>
-<body data-view="idle">
+<body data-view="cover">
 <canvas id="ridge"></canvas>
 
-<main id="intro">
-  <h1>pulsr</h1>
-  <p id="lede">Your music as a ridge of lines. Play something in another tab, then share that tab here.</p>
-  <p id="notice" role="status" hidden></p>
-  <p class="act"><button class="go" id="start">Share a tab</button></p>
-  <div id="guide">
-    <p>In the box Chrome opens:</p>
-    <div id="mock" aria-hidden="true">
-      <p class="m-title">Choose what to share with <span id="m-site"></span></p>
-      <div id="m-panes"></div>
-      <div class="m-body">
-        <div class="m-list"><div class="m-row"><i></i><span id="m-row"></span><b class="n n1">1</b></div></div>
-        <div class="m-preview"><i></i></div>
-      </div>
-      <div class="m-audio-row">
-        <div class="m-audio">
-          <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>
-          <span id="m-audio"></span><i class="m-switch"></i><b class="n n2">2</b>
-        </div>
-      </div>
-      <div class="m-buttons"><span>Cancel</span><span class="m-share">Share with audio<b class="n n3">3</b></span></div>
+<div id="poster">
+  <h1 id="title">PULSR</h1>
+  <button id="prompt">PLAY SOME MUSIC?</button>
+</div>
+
+<main id="intro" hidden>
+  <button class="link" id="back">back</button>
+  <div id="card">
+    <div id="about">
+      <h2>pulsr</h2>
+      <p id="lede">interactive 3d pulsar burst visualiser. play music in another tab and share it here. chrome only soz</p>
     </div>
-    <ol id="steps"></ol>
-    <p id="note" hidden></p>
+    <p id="notice" role="status" hidden></p>
+    <div class="step" id="step1">
+      <button class="cta glow" id="start">share a tab</button>
+    </div>
+    <div class="step" id="step2" hidden>
+      <p>go play some music in another tab, then come back and click ready</p>
+      <button class="cta" id="ready">ready</button>
+    </div>
+    <div class="step" id="step3" hidden>
+      <p id="lead"></p>
+      <div id="mock" aria-hidden="true">
+        <p class="m-title">Choose what to share with <span id="m-site"></span></p>
+        <div id="m-panes"></div>
+        <div class="m-body">
+          <div class="m-list"><div class="m-row"><i></i><span id="m-row"></span><b class="n">1</b></div></div>
+          <div class="m-preview"><i></i></div>
+        </div>
+        <div class="m-audio-row">
+          <div class="m-audio">
+            <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/></svg>
+            <span id="m-audio"></span><i class="m-switch"></i><b class="n">2</b>
+          </div>
+        </div>
+        <div class="m-buttons"><span>Cancel</span><span class="m-share">Share with audio<b class="n">3</b></span></div>
+      </div>
+      <ol id="steps"></ol>
+      <p id="note" hidden></p>
+      <button class="cta" id="sharenow">share</button>
+    </div>
+    <p id="fallback" hidden>this browser can’t share a tab, but you can <button class="link" id="usemic">use the microphone</button></p>
+    <p id="terminal">pulsr also <a class="link" href="https://github.com/1337raspberry/pulsr" target="_blank" rel="noopener">runs in a terminal</a></p>
   </div>
-  <p id="others">
-    Or <button class="link" id="everything">share everything this computer plays</button>,
-    or <button class="link" id="usemic">use the microphone</button>.
-  </p>
-  <p id="terminal">pulsr also <a class="link" href="https://github.com/1337raspberry/pulsr" target="_blank" rel="noopener">runs in a terminal</a>.</p>
-  <p class="act" id="fallback" hidden><button class="go" id="micfirst">Use the microphone</button></p>
 </main>
+
+<p id="tips">try click/drag/scrolling. press P to see more options and change themes</p>
 
 <footer id="status" hidden>
   <span id="what"></span>

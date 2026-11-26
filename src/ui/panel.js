@@ -3,7 +3,9 @@
 import { Pane } from 'tweakpane';
 import { SETTINGS } from '../settings.js';
 
-const FOLDERS = ['levels', 'motion', 'shape', 'depth', 'camera'];
+const FOLDERS = ['levels', 'motion', 'shape', 'depth', 'camera', 'cover'];
+// How long the copy button shows what happened, in ms.
+const COPIED_MS = 2000;
 const GRADIENT = SETTINGS.find((s) => s.name === 'gradient');
 
 export function createPanel({ values, onChange, onResetView, onCopyLink }) {
@@ -30,7 +32,14 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
   const bindings = new Map(basics.map((s) => [s.name, bind(pane, s)]));
   let gradientTheme = model.theme;
   pane.addButton({ title: 'reset view' }).on('click', () => onResetView());
-  pane.addButton({ title: 'copy link' }).on('click', () => onCopyLink());
+  // `onCopyLink` resolves to a few words on how it went, shown on the button for a moment.
+  const copy = pane.addButton({ title: 'copy link' });
+  let copied = null;
+  copy.on('click', async () => {
+    copy.title = (await onCopyLink()) || 'copy link';
+    clearTimeout(copied);
+    copied = setTimeout(() => { copy.title = 'copy link'; }, COPIED_MS);
+  });
 
   const more = pane.addFolder({ title: 'more', expanded: false });
   for (const title of FOLDERS) {
