@@ -1,0 +1,42 @@
+# How the desktop app is packaged: `npm run desktop:pack` builds the page, then wraps it
+# and desktop/main.js for the system it runs on. The installers land in `release`.
+
+appId: app.pulsrviz.pulsr
+productName: pulsr
+copyright: Copyright © 2026 1337raspberry
+icon: desktop/icon.png
+artifactName: pulsr-${version}-${os}-${arch}.${ext}
+
+directories:
+  output: release
+
+# The page is already bundled into `dist`, so none of its libraries are packed again.
+files:
+  - dist/**
+  - desktop/main.js
+  - package.json
+  - "!node_modules/**"
+
+mac:
+  category: public.app-category.music
+  target:
+    - target: dmg
+      arch: universal
+  # Signed ad hoc: the signature names nobody, so macOS asks before the first run.
+  identity: "-"
+  hardenedRuntime: false
+  extendInfo:
+    # Without these macOS hands the app silence instead of asking.
+    NSAudioCaptureUsageDescription: pulsr draws the sound this computer plays. Nothing is recorded or sent anywhere.
+    NSMicrophoneUsageDescription: pulsr draws the sound of the input you choose. Nothing is recorded or sent anywhere.
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+
+linux:
+  category: AudioVideo
+  target:
+    - target: AppImage
+      arch: x64

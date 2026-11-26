@@ -39,6 +39,8 @@ const SILENT_PEAK = 0.001;
 const PAUSE_AFTER_MS = 1000;
 // How far an arrow key moves through a file.
 const SEEK_STEP_SEC = 10;
+// Where the page lives on the web.
+const SITE = 'https://pulsrviz.app/';
 // World height the cover allows for peaks above its back row, for the poster's shape.
 const PEAK_ROOM = 1.5;
 
@@ -106,6 +108,7 @@ let moved = false;
 const LISTENING = {
   tab: 'Listening to a shared tab',
   screen: 'Listening to this computer’s sound',
+  system: 'Listening to this computer’s sound',
   mic: 'Listening through the microphone',
   test: 'Playing the test signal',
 };
@@ -121,8 +124,8 @@ function listening(route) {
   return LISTENING[route] ?? 'Listening';
 }
 // What the start button says for each source, and the stop button while it plays.
-const START = { tab: 'share a tab', screen: 'share system audio', mic: 'listen', files: 'play' };
-const STOP = { tab: 'stop sharing', screen: 'stop sharing', files: 'pause' };
+const START = { tab: 'share a tab', screen: 'share system audio', system: 'listen', mic: 'listen', files: 'play' };
+const STOP = { tab: 'stop sharing', screen: 'stop sharing', system: 'stop listening', files: 'pause' };
 // What the ridge draws once stopped: silence, so it is plain that nothing is heard.
 const quiet = {
   read(t, out) {
@@ -597,11 +600,13 @@ let linkNotice = null;
 // only when the camera is not drifting, since a drifting camera has no view to keep.
 async function copyLink() {
   const text = encode(values, stage.isDrifting() ? null : stage.getView());
-  const url = location.origin + location.pathname + (text ? `#${text}` : '');
+  const tail = text ? `#${text}` : '';
+  const here = location.origin + location.pathname + tail;
   let notice = 'Link copied';
   try {
-    history.replaceState(null, '', url);
-    await navigator.clipboard.writeText(url);
+    history.replaceState(null, '', here);
+    // The desktop app's own address opens nowhere else, so its links lead to the site.
+    await navigator.clipboard.writeText(where.desktop ? SITE + tail : here);
   } catch {
     notice = 'Link is in the address bar';
   }
@@ -794,17 +799,19 @@ function start() {
     if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
     // Letters typed into a text or number field are the field's.
     if (event.target.closest?.('textarea, input:not([type="checkbox"])')) return;
-    status.stir();
-    if (event.key === 'Escape' && document.body.dataset.view === 'intro') toCover();
     const key = event.key.toLowerCase();
+    // Up and down step through the presets, except where the arrows belong to a list, a
+    // menu or one of the options' sliders. Stepping leaves the status line as it is, so a
+    // look can be tried after another with nothing over the picture.
+    const stepping = (key === 'arrowup' || key === 'arrowdown') && !event.target.closest?.('select, menu, .tp-sldv_t');
+    if (!stepping) status.stir();
+    if (event.key === 'Escape' && document.body.dataset.view === 'intro') toCover();
     // A hotkey on a focused list replaces the list's own jump to a matching entry.
     if (key.length === 1 && 'tgpfvdsqonib'.includes(key) && event.target instanceof HTMLSelectElement) {
       event.preventDefault();
       event.target.blur();
     }
-    // Up and down step through the presets, except where the arrows belong to a list, a
-    // menu or one of the options' sliders.
-    if ((key === 'arrowup' || key === 'arrowdown') && !event.target.closest?.('select, menu, .tp-sldv_t')) {
+    if (stepping) {
       event.preventDefault();
       stepPreset(key === 'arrowup' ? -1 : 1);
     }

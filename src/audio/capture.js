@@ -15,6 +15,8 @@ function describe(settings, keys) {
 // What each way of sharing asks the browser's picker for.
 //   tab:    opens on the list of tabs, with screens left out and this page's own tab hidden
 //   screen: opens on the screens, with the whole computer's sound on offer
+//   system: the same, asked of the desktop app, which answers by itself with the
+//           computer's sound and shows no picker
 function pickerOptions(route) {
   const audio = {
     echoCancellation: false,
@@ -60,8 +62,9 @@ const UNASKED_WAIT_MS = 250;
 // Going back within this long of a file's start goes to the file before; later, to its start.
 const RESTART_AFTER_SEC = 3;
 
-// Gets sound into the analyser worklet from a shared tab or screen, an input such as the
-// microphone, the visitor's own files or the built-in test signal. `onFrames` gets each
+// Gets sound into the analyser worklet from a shared tab or screen, the computer's own sound
+// in the desktop app, an input such as the microphone, the visitor's own files or the
+// built-in test signal. `onFrames` gets each
 // message the analyser posts. `onEnded(notice)` is called when the sound stops from
 // outside the page, or when no file would play, with a line saying so. `onTrack` is told
 // each file as it comes up: { name, index, count }.
@@ -168,6 +171,13 @@ export function createCapture({ onFrames, onEnded, onTrack = () => {}, log }) {
       for (const track of granted.getTracks()) track.stop();
       return { ok: false, why: 'noaudio', surface };
     }
+    // A system that refuses the capture can still hand over a track, one that is over
+    // before it starts.
+    if (audio.readyState === 'ended') {
+      log('the audio track came already ended: the system did not allow the capture');
+      for (const track of granted.getTracks()) track.stop();
+      return { ok: false, why: 'noaudio', surface };
+    }
     stream = granted;
     for (const track of granted.getTracks()) {
       track.addEventListener('ended', () => {
@@ -242,7 +252,11 @@ export function createCapture({ onFrames, onEnded, onTrack = () => {}, log }) {
       for (const track of granted.getTracks()) track.stop();
       return { ok: false, why: 'error', error: failed };
     }
-    return attach(granted, route === 'tab' ? 'shared tab' : 'shared audio');
+    if (route !== 'system') return attach(granted, route === 'tab' ? 'shared tab' : 'shared audio');
+    const result = attach(granted, 'computer audio');
+    // The picture that came along is the app's own window, and is not wanted.
+    if (result.ok) for (const track of granted.getVideoTracks()) track.stop();
+    return result;
   }
 
   const refused = (error) => {

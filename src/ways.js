@@ -1,8 +1,14 @@
 // Which browser and system the page is on, and which ways of getting music in are known to
-// work there. The introduction offers only those.
+// work there. The introduction offers only those. The page also runs inside the desktop
+// app, which hears the computer's own sound without anything being shared.
 
 // The ways in. `route` is what starting one asks the capture for.
 export const WAYS = {
+  system: {
+    route: 'system',
+    label: 'listen to this computer',
+    blurb: 'hears everything this computer plays, so spotify or any other app works',
+  },
   tab: {
     route: 'tab',
     label: 'share a tab + its audio',
@@ -67,26 +73,30 @@ function systemOf(userAgent, platform, maxTouchPoints) {
 }
 
 // Where the page is, from what the browser says of itself: { browser, system, chromium,
-// mobile }, the names lower-case and empty where they cannot be told. `chromium` is about
-// the engine, so Chrome on an iPhone, which is Safari underneath, is not.
+// mobile, desktop }, the names lower-case and empty where they cannot be told. `chromium`
+// is about the engine, so Chrome on an iPhone, which is Safari underneath, is not.
+// `desktop` is the desktop app, which is no browser and so has no name for one.
 export function detect({ userAgent = '', userAgentData = null, maxTouchPoints = 0 } = {}) {
   const brands = userAgentData?.brands ?? [];
   const system = systemOf(userAgent, userAgentData?.platform ?? '', maxTouchPoints);
+  const desktop = /\bElectron\//.test(userAgent);
   return {
-    browser: browserOf(userAgent, brands),
+    browser: desktop ? '' : browserOf(userAgent, brands),
     system,
     chromium: brands.some((entry) => entry.brand === 'Chromium'),
     mobile: userAgentData?.mobile ?? MOBILE.includes(system),
+    desktop,
   };
 }
 
 // A browser and system by name, as in "firefox-linux", for seeing the page as another
-// setup does. Null for anything else.
+// setup does; "desktop-linux" and the like are the desktop app. Null for anything else.
 export function named(text) {
   const [browser, system] = (text || '').toLowerCase().split('-');
   if (!browser || !system) return null;
   const mobile = MOBILE.includes(system);
-  return { browser, system, chromium: CHROMIUM.includes(browser) && system !== 'ios' && system !== 'ipados', mobile };
+  if (browser === 'desktop') return { browser: '', system, chromium: true, mobile: false, desktop: true };
+  return { browser, system, chromium: CHROMIUM.includes(browser) && system !== 'ios' && system !== 'ipados', mobile, desktop: false };
 }
 
 // What to offer at `where`: `ways` in order, the first the one to lead with, and
@@ -94,6 +104,8 @@ export function named(text) {
 // for another browser on this computer, 'computer' from a phone or tablet).
 // `displayMedia` says the browser has the sharing call at all.
 export function offerFor(where, { displayMedia = true } = {}) {
+  // The desktop app is given the computer's sound for the asking.
+  if (where.desktop) return { ways: ['system', 'files', 'mic'], elsewhere: null };
   if (where.chromium && !where.mobile && displayMedia) {
     // The whole computer's sound comes with a shared screen on every system but Linux,
     // where the browser passes on a tab's sound only.

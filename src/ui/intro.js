@@ -35,6 +35,14 @@ export const GUIDES = {
   },
 };
 
+// Why the desktop app could not hear the computer, by system.
+const UNHEARD = {
+  macos:
+    'pulsr could not hear this computer. Allow it under System Settings, Privacy & Security, Screen & System Audio ' +
+    'Recording, System Audio Recording Only, then start again. It needs macOS 14.2 or later.',
+  other: 'pulsr could not hear this computer. Your own files and sound inputs still work.',
+};
+
 // Where a tab could be shared, said where it cannot be here.
 const ELSEWHERE = {
   browser: 'or open this page in a chromium based browser (chrome, edge, brave…) if you have one, and share a tab’s audio there.',
@@ -46,8 +54,9 @@ const ELSEWHERE = {
 // of getting music in that work there (`offer`, from `offerFor`), each with a word on what
 // it does. A tab or the screen leads to "go and play something", "ready" leads to a picture
 // of the browser's picker, and "share" opens the real one; the later steps show only their
-// own words. Files and inputs start at once. `onStart(route)` gets 'tab', 'screen', 'files'
-// or 'mic'; `onClose()` is called when the visitor backs out.
+// own words. Files, inputs and the desktop app's listening start at once. `onStart(route)`
+// gets 'tab', 'screen', 'system', 'files' or 'mic'; `onClose()` is called when the visitor
+// backs out.
 export function createIntro({ where, offer, onStart, onClose }) {
   // The way of sharing the picture describes and the share button starts.
   let chosen = 'tab';
@@ -117,6 +126,7 @@ export function createIntro({ where, offer, onStart, onClose }) {
   // Says what went wrong with a share and what to do about it.
   function explain(route, result) {
     if (result.why === 'nofiles') return 'None of those were music files.';
+    if (route === 'system') return UNHEARD[where.system] ?? UNHEARD.other;
     if (result.why === 'cancelled') return route === 'mic' ? 'No input was allowed.' : 'Nothing was shared.';
     if (result.why === 'blocked') {
       return (
