@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import {
-  FLOWS, LAYOUTS, OPENING_PALETTE, OPENING_PRESET, PRESETS, PRESET_COLOURS, SETTINGS, decode, defaults, encode,
+  FLOWS, LAYOUTS, OPENING_PALETTE, OPENING_PRESET, PRESETS, PRESET_COLOURS, SETTINGS, SHELVED, decode, defaults, encode,
 } from '../src/settings.js';
 import { PALETTES, findPalette } from '../src/palettes.js';
 import { findEntry } from '../src/looks/index.js';
@@ -33,7 +33,7 @@ test('every setting says what it does in one short line', () => {
 test('defaults encode to nothing', () => expect(encode(defaults(), null)).toBe(''));
 
 test('the opening preset has the sleeve’s defaults, and immersive pulsr’s own', () => {
-  expect(PRESETS.slice(0, 4)).toEqual(['division', 'immersive', 'inyoface', 'sheet']);
+  expect(PRESETS.slice(0, 4)).toEqual(['division', 'immersive', 'closeup', 'sheet']);
   expect([OPENING_PRESET, OPENING_PALETTE]).toEqual(['division', 'greyscale']);
   expect(defaults()).toMatchObject({
     preset: 'division', palette: 'greyscale', colours: 'white', rows: 80, speed: 12, peak: 0.25, span: 0.7, fadeCurve: 0, tilt: 40,
@@ -49,13 +49,20 @@ test('the opening preset has the sleeve’s defaults, and immersive pulsr’s ow
 
 test('the closer presets are pulsr’s own from another seat', () => {
   const { preset: a, tilt: tiltA, ...immersive } = defaults('immersive');
-  const { preset: b, tilt: tiltB, ...inyoface } = defaults('inyoface');
-  expect(inyoface).toEqual(immersive);
-  expect([tiltA, tiltB]).toEqual([18, 2]);
+  // Close up: a wide lens, nearly level, in whatever colours are showing.
+  const { preset: b, tilt: tiltB, fov: fovB, ...closeup } = defaults('closeup');
+  const { fov: fovA, ...rest } = immersive;
+  expect(closeup).toEqual(rest);
+  expect([tiltA, tiltB, fovB]).toEqual([18, 5, 75]);
+  expect(PRESET_COLOURS.closeup).toBeUndefined();
+  expect(LAYOUTS.closeup).toEqual({ sleeve: false, framing: 15.17 });
+  // A link written under the preset's old name opens it.
+  expect(decode('preset=inyoface').values.preset).toBe('closeup');
+  expect(encode(defaults('closeup'), null)).toBe('preset=closeup');
   expect(defaults('sheet')).toEqual({
-    ...defaults('inyoface'), preset: 'sheet', flow: 'towards live', trench: 0.25, rows: 100, speed: 50,
+    ...defaults('immersive'), preset: 'sheet', tilt: 2, flow: 'towards live', trench: 0.25, rows: 100, speed: 50,
   });
-  expect(LAYOUTS.sheet.framing).toBeGreaterThan(LAYOUTS.inyoface.framing);
+  expect(LAYOUTS.sheet.framing).toBeGreaterThan(LAYOUTS.closeup.framing);
   expect(LAYOUTS.sheet).toEqual({ sleeve: false, framing: 15.75, target: [0, 3, -7] });
   expect(decode('preset=trenchrun').values.preset).toBeUndefined();
   expect(defaults().flow).toBe('away');
@@ -72,7 +79,7 @@ test('the scenes are named, each once, in lower case', () => {
 
 test('a scene brings colours that exist, and its link is its name alone', () => {
   for (const [preset, own] of Object.entries(PRESET_COLOURS)) {
-    expect(PRESETS, preset).toContain(preset);
+    expect([...PRESETS, ...SHELVED], preset).toContain(preset);
     const palette = findPalette(own.palette);
     expect(palette.name, preset).toBe(own.palette);
     expect(palette.gradients.map((g) => g.name), preset).toContain(own.colours);
@@ -82,6 +89,14 @@ test('a scene brings colours that exist, and its link is its name alone', () => 
     expect(encode(defaults(preset), null), preset).toBe(`preset=${preset}`);
     const { values } = decode(`preset=${preset}`);
     expect({ ...defaults(values.preset, values.palette), ...values }, preset).toEqual(defaults(preset));
+  }
+});
+
+test('a shelved scene is not offered, and a link to it opens the opening preset', () => {
+  expect(SHELVED).toEqual(['milkyway']);
+  for (const preset of SHELVED) {
+    expect(PRESETS, preset).not.toContain(preset);
+    expect(decode(`preset=${preset}`).values.preset, preset).toBeUndefined();
   }
 });
 

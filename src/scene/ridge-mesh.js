@@ -172,9 +172,11 @@ export function createRidgeMesh({ history, resolution, pixelRatio, shared }) {
   let extras = [];
   let rows = count;
 
-  // Builds the two materials for `look`: `{ shape, line, tint, ground, veil }`, the first
-  // three entries of their slots, `ground` a colour node for what is behind the ridge, and
-  // `veil` what the backdrop would paint the curtains with, if anything.
+  // Builds the two materials for `look`: `{ shape, line, tint, ground, veil, solid }`, the
+  // first three entries of their slots, `ground` a colour node for what is behind the ridge,
+  // `veil` what the backdrop would paint the curtains with, if anything, and `solid` whether
+  // the ridge hides that backdrop outright, its lines fading into the veil as well.
+  // `groundAt(uv)`, where the backdrop paints a picture, reads it at any screen point.
   function setLook(look) {
     const row = rowAt(int(instanceIndex), look.shape.fold ?? null);
     const index = int(round(positionGeometry.x.add(0.5).mul(points - 1)));
@@ -198,12 +200,15 @@ export function createRidgeMesh({ history, resolution, pixelRatio, shared }) {
       age: varying(row.age),
     };
     const ground = look.ground;
+    // What a line fades towards as its row ages.
+    let into = ground;
     const paint = {
       ...shared,
       ...v,
       u, resolution, pixelRatio, ground, copy, phase, cuts,
+      groundAt: look.groundAt ?? null,
       // A colour faded towards what is behind the ridge, as the row's age asks.
-      faded: (colour) => mix(ground, colour, v.fade),
+      faded: (colour) => mix(into, colour, v.fade),
       // The vertex's side: the row, the point, and the means to place others.
       // `rowAt` reads the spectrum as the shape folds it.
       row, index, level, points, texture, alongAt, levelAt, place, WIDTH,
@@ -211,6 +216,7 @@ export function createRidgeMesh({ history, resolution, pixelRatio, shared }) {
     };
     // The tint's colour, for this pixel of the line or, given other values for any of
     // the context's (`t`, `along`, `height`, ...), for something else a style draws.
+    if (look.solid && look.veil) into = look.veil(paint);
     const tintOf = (other = {}) => look.tint.colour({ ...paint, ...other });
     const toClip = (p) => cameraProjectionMatrix.mul(cameraViewMatrix).mul(modelWorldMatrix).mul(vec4(p, 1));
     // A point at or behind the eye has no place on screen; its w is held just in front.

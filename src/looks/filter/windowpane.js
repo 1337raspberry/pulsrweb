@@ -6,9 +6,9 @@ import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { groundOf, handOn } from '../lib/filter-ground.js';
 import { runningDrops, stillDrops } from '../lib/filter-rain.js';
 
-// Layer sizes: how many cells fit down the screen.
-const BIG = 3.2;
-const SMALL = 6.5;
+// Layer sizes: how many cell widths fit down the screen.
+const BIG = 5;
+const SMALL = 9;
 const FINE = 28;
 
 export default {
@@ -20,8 +20,8 @@ export default {
     const heavy = uniform(0.5);
     const aspect = resolution.x.div(resolution.y);
     const pane = vec2(uv.x.mul(aspect), uv.y);
-    const big = runningDrops(pane.mul(BIG), rain, 1, 2.6);
-    const small = runningDrops(pane.mul(SMALL), rain.mul(1.25), 2, 2.2);
+    const big = runningDrops(pane.mul(BIG), rain, 1, 2.6, { size: [0.085, 0.15], amount: 0.8 });
+    const small = runningDrops(pane.mul(SMALL), rain.mul(1.25), 2, 2.2, { size: [0.065, 0.125], amount: 0.6 });
     const fine = stillDrops(pane.mul(FINE), rain, 3);
     // Layer units back to the picture's uv.
     const back = (v, scale) => vec2(v.x.div(aspect), v.y).div(scale);

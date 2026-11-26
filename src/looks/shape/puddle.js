@@ -9,7 +9,7 @@ const CLEAR = 0.5;
 export default {
   name: 'puddle',
   copies: 2,
-  layout: { sleeve: false, tilt: 6, framing: 15, target: [0, 0.6, -5], orbit: { azimuth: [-50, 50], polar: [65, 89] } },
+  layout: { sleeve: false, tilt: 6, framing: 11, target: [0, 0.6, -5], orbit: { azimuth: [-50, 50], polar: [65, 89] } },
   place: ({ along, height, row, copy, time, WIDTH }) => {
     const x = along.sub(0.5).mul(WIDTH);
     const ripple = sin(row.z.mul(2.7).add(time.mul(1.6))).mul(0.06).mul(row.far.add(0.4));

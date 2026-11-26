@@ -17,5 +17,6 @@ import nib from './nib.js';
 import chrome from './chrome.js';
 import sketch from './sketch.js';
 import sparks from './sparks.js';
+import area from './area.js';
 
-export default [solid, dashed, neon, zap, dots, fairy, yarn, glass, papercut, ribbon, skyline, veils, grid, scope, nib, chrome, sketch, sparks];
+export default [solid, dashed, neon, zap, dots, fairy, yarn, glass, papercut, ribbon, skyline, veils, grid, scope, nib, chrome, sketch, sparks, area];

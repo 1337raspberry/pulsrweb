@@ -9,9 +9,12 @@ import glyphfall from './glyphfall.js';
 import aurora from './aurora.js';
 import eclipse from './eclipse.js';
 import stargazer from './stargazer.js';
+import nebula from './nebula.js';
 import cinders from './cinders.js';
 import flurry from './flurry.js';
 import storm from './storm.js';
 import deepend from './deepend.js';
+import studio from './studio.js';
+import spreadsheet from './spreadsheet.js';
 
-export default [plain, dusk, smokies, retrosun, pane, cityglow, glyphfall, aurora, eclipse, stargazer, cinders, flurry, storm, deepend];
+export default [plain, dusk, smokies, retrosun, pane, cityglow, glyphfall, aurora, eclipse, stargazer, nebula, cinders, flurry, storm, deepend, studio, spreadsheet];

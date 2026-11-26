@@ -10,8 +10,11 @@ export function createBackdrop({ scene, shared, resolution, pixelRatio }) {
   // The texture the current picture is drawn into, if there is a picture.
   let picture = null;
 
-  // Puts `entry` up. Returns the ground, a colour node for what is behind a pixel, and
-  // the veil, if the backdrop has one: what it would paint the ridge's curtains with.
+  // Puts `entry` up. Returns the ground, a colour node for what is behind a pixel, the
+  // veil, if the backdrop has one: what it would paint the ridge's curtains with, and
+  // whether the backdrop is `solid`: hidden outright by the ridge, whose lines then fade
+  // into the veil rather than into the picture. `pictured` says whether there is a picture
+  // at all, for a line style that would show the surroundings in itself.
   function set(entry) {
     if (made) {
       if (made.object) scene.remove(made.object);
@@ -39,7 +42,7 @@ export function createBackdrop({ scene, shared, resolution, pixelRatio }) {
     // filter that wants to tell the ridge from what is behind it.
     const drawn = picture;
     const groundAt = (at) => (drawn ? drawn.sample(vec2(at.x, at.y.oneMinus())).rgb : shared.background);
-    return { ground, groundAt, veil: made.veil ?? entry.veil ?? null };
+    return { ground, groundAt, veil: made.veil ?? entry.veil ?? null, solid: !!(made.solid ?? entry.solid), pictured: !!drawn };
   }
 
   // `tick` is the frame's `{ seconds, dt, camera, ... }`.

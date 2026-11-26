@@ -524,7 +524,7 @@ function applyLook() {
   staleLook = false;
   const set = backdrop.set(behind);
   groundAt = set.groundAt;
-  mesh.setLook({ ...look, ground: set.ground, veil: set.veil });
+  mesh.setLook({ ...look, ground: set.ground, veil: set.veil, solid: set.solid, groundAt: set.pictured ? set.groundAt : null });
   // The filters read the backdrop's picture too.
   staleFilters = true;
   applyValues();

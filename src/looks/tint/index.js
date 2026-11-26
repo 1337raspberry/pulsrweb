@@ -15,5 +15,7 @@ import haze from './haze.js';
 import borealis from './borealis.js';
 import glitter from './glitter.js';
 import relief from './relief.js';
+import series from './series.js';
+import teletext from './teletext.js';
 
-export default [height, prism, onetwo, embers, redline, sonar, thermal, chameleon, oilslick, p7, flashbulb, tidelines, haze, borealis, glitter, relief];
+export default [height, prism, onetwo, embers, redline, sonar, thermal, chameleon, oilslick, p7, flashbulb, tidelines, haze, borealis, glitter, relief, series, teletext];

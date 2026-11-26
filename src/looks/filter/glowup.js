@@ -22,8 +22,9 @@ export default {
     const lineness = smoothstep(mix(0.08, 0.2, light), mix(0.3, 0.5, light), standout(colour.rgb, behind));
     const lift = max(colour.rgb.sub(behind).mul(float(1).sub(light.mul(2))), vec3(0));
     // A backdrop's own brightest parts, a sun or a lit window, keep a faint glow of their
-    // own on a dark palette.
-    const highlight = min(max(behind.sub(0.7), vec3(0)), vec3(1)).mul(light.oneMinus().mul(0.15));
+    // own on a dark palette, where they are in view and not hidden behind the ridge.
+    const inView = smoothstep(0.03, 0.15, colour.rgb.sub(behind).length()).oneMinus();
+    const highlight = min(max(behind.sub(0.7), vec3(0)), vec3(1)).mul(light.oneMinus().mul(0.15)).mul(inView);
     const source = vec4(lift.mul(lineness).add(highlight), 1);
     // Thin dark lines on a light page cover little, so their bleed needs more strength.
     const strength = float(0.7).add(bass.mul(0.8)).add(beat.mul(0.35)).mul(light.mul(0.8).add(1));

@@ -10,10 +10,12 @@ import { PALETTES, findPalette } from './palettes.js';
 import { SLOTS } from './looks/index.js';
 
 export const PRESETS = [
-  'division', 'immersive', 'inyoface', 'sheet',
+  'division', 'immersive', 'closeup', 'sheet',
   '4am', 'nightcall', 'llama', 'lightspeed', 'borealis', 'diorama', 'sumi', 'ttyl', 'redpill', 'openlate',
-  'magma', 'lido', 'funnies', 'blip', 'milkyway', 'plasmaball', 'snowday', 'bside', 'slinky', 'highrise',
+  'magma', 'lido', 'funnies', 'blip', 'plasmaball', 'snowday', 'bside', 'slinky', 'highrise', 'vlookup', 'p100',
 ];
+// Scenes that are kept below but not offered for now: a link to one opens the opening preset.
+export const SHELVED = ['milkyway'];
 // Which way the rows travel. Away: born at the front with the sound, receding. Towards
 // live: coming at the camera, as if flying forwards, every row showing the live shape.
 export const FLOWS = ['away', 'towards live'];
@@ -151,15 +153,15 @@ const IMMERSIVE = {
   spacing: 0.38, depthScale: 0.39, fadeCurve: 0.75, alpha: 0.85, tilt: 18,
 };
 const SHEET = { ...IMMERSIVE, tilt: 2, flow: 'towards live', trench: 0.25, rows: 100, speed: 50 };
-// What each preset changes from the table. `inyoface` is pulsr's own from close in and
-// almost level; `sheet` stands further back from rows that come at the camera, all showing
+// What each preset changes from the table. `closeup` is pulsr's own through a wide lens
+// from close in and almost level; `sheet` stands further back from rows that come at the camera, all showing
 // the live shape, so their near edge is in view. The scenes after those four are whole
 // looks: one entry from each of the look's slots, the settings that suit them, and (in
 // PRESET_COLOURS) a palette.
 const PRESET_VALUES = {
   division: {},
   immersive: IMMERSIVE,
-  inyoface: { ...IMMERSIVE, tilt: 2 },
+  closeup: { ...IMMERSIVE, tilt: 5, fov: 75 },
   sheet: SHEET,
   // A city of towers, one per band, seen through a rainy window late at night.
   '4am': {
@@ -171,8 +173,8 @@ const PRESET_VALUES = {
   // The ridge smeared and folded into a turning kaleidoscope, the colours drifting through
   // the palette, as the media players' visualisers did.
   llama: { ...IMMERSIVE, line: 'neon', tint: 'chameleon', filter: 'echo', filter2: 'kaleido', lineWidth: 2 },
-  // Flying down a tunnel made of the last few seconds.
-  lightspeed: { ...SHEET, shape: 'wormhole', tint: 'prism', filter: 'glowup', filter2: 'fringe', fov: 45 },
+  // Flying down a snaking tunnel made of the last few seconds, towards a glowing cloud.
+  lightspeed: { ...SHEET, shape: 'wormhole', tint: 'prism', backdrop: 'nebula', filter: 'glowup', filter2: 'fringe', fov: 45 },
   // Northern lights over the ridge and rising off it, mirrored in a still lake.
   borealis: {
     ...IMMERSIVE, shape: 'puddle', line: 'veils', tint: 'borealis', backdrop: 'aurora',
@@ -181,7 +183,7 @@ const PRESET_VALUES = {
   // A shadow box of cut-card hills against an evening sky.
   diorama: {
     ...IMMERSIVE, line: 'papercut', backdrop: 'dusk', filter: 'vignette',
-    rows: 16, spacing: 0.6, peak: 0.45, depthScale: 1.3, speed: 4, smooth: 0.5, spread: 3, edgeTaper: 0.1,
+    rows: 30, spacing: 0.6, peak: 0.45, depthScale: 1.3, speed: 4, smooth: 0.5, spread: 3, edgeTaper: 0.1,
     fadeCurve: 0, alpha: 1, tilt: 10, fov: 22,
   },
   // Mountains brushed in ink, paling into mist on paper under a red sun.
@@ -210,20 +212,31 @@ const PRESET_VALUES = {
   funnies: {
     ...IMMERSIVE, tint: 'onetwo', filter: 'pressrun', filter2: 'fringe', lineWidth: 3, rows: 30, spacing: 0.5,
   },
-  // A radar screen: the history sweeping round the dial in phosphor green.
-  blip: { ...IMMERSIVE, shape: 'radar', line: 'scope', tint: 'p7', filter: 'telly' },
+  // A radar screen: the history sweeping round the dial as a web in phosphor green.
+  blip: { ...IMMERSIVE, shape: 'radar', line: 'grid', tint: 'p7', filter: 'telly' },
   // A spiral galaxy of sound under a sky full of stars.
   milkyway: { ...IMMERSIVE, shape: 'galaxy', line: 'fairy', tint: 'prism', backdrop: 'stargazer', filter: 'glowup' },
   // Lightning crawling over a glass ball.
   plasmaball: { ...IMMERSIVE, shape: 'marble', line: 'zap', filter: 'glowup' },
   // Sheets of ice on a little planet in the snow.
   snowday: { ...IMMERSIVE, shape: 'smallworld', line: 'glass', backdrop: 'flurry', filter: 'vignette' },
-  // A record turning under strings of fairy lights.
-  bside: { ...IMMERSIVE, shape: 'vinyl', line: 'fairy', tint: 'prism', filter: 'vignette' },
-  // The ridge rolling itself up into a coil of polished metal.
-  slinky: { ...IMMERSIVE, shape: 'rollup', line: 'chrome', lineWidth: 3 },
+  // A record turning, its grooves cut by the music.
+  bside: { ...IMMERSIVE, shape: 'vinyl', filter: 'vignette' },
+  // The ridge rolling itself up into a coil of polished metal under studio lights.
+  slinky: { ...IMMERSIVE, shape: 'rollup', line: 'chrome', backdrop: 'studio', lineWidth: 6, rows: 32, spacing: 0.6 },
   // A tower of lit windows, the history climbing its sides.
   highrise: { ...IMMERSIVE, shape: 'totem', line: 'skyline', filter: 'glowup' },
+  // A spreadsheet of the spectrum's figures, with the ridge as an area chart floating over it.
+  vlookup: {
+    ...IMMERSIVE, line: 'area', tint: 'series', backdrop: 'spreadsheet', filter: 'plotarea',
+    rows: 10, spacing: 0.6, speed: 3, peak: 0.65, grain: 0, fadeCurve: 0.2, alpha: 1, lineWidth: 1.5, tilt: 14, fov: 30,
+  },
+  // A teletext page on an old television: the ridge in chunky blocks of eight colours, under
+  // a header with the time ticking.
+  p100: {
+    ...IMMERSIVE, tint: 'teletext', filter: 'teletext', filter2: 'telly',
+    lineWidth: 3, rows: 34, peak: 0.5, speed: 12, tilt: 6, fov: 18,
+  },
 };
 // A preset that is a whole scene comes with colours of its own: a palette, and the entry
 // of it to use. Picking the preset picks them; they can be changed afterwards like any other.
@@ -248,6 +261,8 @@ export const PRESET_COLOURS = {
   bside: { palette: 'rose-pine', colours: 'moon gold-love' },
   slinky: { palette: 'greyscale', colours: 'silver' },
   highrise: { palette: 'tokyo-night', colours: 'teal-blue' },
+  vlookup: { palette: 'catppuccin', colours: 'latte blue-pink' },
+  p100: { palette: 'greyscale', colours: 'white' },
 };
 // How each preset is laid out for the camera: as the sleeve, or open, showing `framing`
 // of the scene's height at the point its front view looks at (`target`, where it has its own).
@@ -255,7 +270,7 @@ export const PRESET_COLOURS = {
 export const LAYOUTS = {
   division: { sleeve: true },
   immersive: { sleeve: false, framing: 12.7 },
-  inyoface: { sleeve: false, framing: 7.7 },
+  closeup: { sleeve: false, framing: 15.17 },
   sheet: { sleeve: false, framing: 15.75, target: [0, 3, -7] },
   '4am': { sleeve: false, framing: 10, target: [0, 2.5, -6] },
   llama: { sleeve: false, framing: 12.7 },
@@ -267,6 +282,8 @@ export const LAYOUTS = {
   magma: { sleeve: false, framing: 11.5 },
   lido: { sleeve: false, framing: 11, target: [0, 2, -5] },
   funnies: { sleeve: false, framing: 11, target: [0, 2, -5] },
+  vlookup: { sleeve: false, framing: 14.8, target: [0, 3.47, -2.5] },
+  p100: { sleeve: false, framing: 9, target: [0, 2.5, -6] },
 };
 
 const BY_NAME = new Map(SETTINGS.map((s) => [s.name, s]));
@@ -339,6 +356,9 @@ function safeDecode(text) {
   }
 }
 
+// Choices that go by another name now, so that links written with the old one still open.
+const RENAMED = { preset: { inyoface: 'closeup' } };
+
 // Never throws; returns only known settings with in-range values, and a view or null.
 export function decode(fragment) {
   const values = {};
@@ -348,8 +368,9 @@ export function decode(fragment) {
     const eq = part.indexOf('=');
     if (eq < 0) continue;
     const name = safeDecode(part.slice(0, eq));
-    const raw = safeDecode(part.slice(eq + 1));
-    if (name === null || raw === null) continue;
+    const written = safeDecode(part.slice(eq + 1));
+    if (name === null || written === null) continue;
+    const raw = RENAMED[name]?.[written] ?? written;
     if (name === 'view') {
       view = parseView(raw);
       continue;

@@ -20,5 +20,7 @@ import tracking from './tracking.js';
 import tubes from './tubes.js';
 import vignette from './vignette.js';
 import mirror from './mirror.js';
+import plotarea from './plotarea.js';
+import teletext from './teletext.js';
 
-export default [none, glowup, windowpane, typewriter, tty, braille, telly, kaleido, vortex, echo, fluted, onebit, pocket, ledwall, pressrun, fringe, tracking, tubes, vignette, mirror];
+export default [none, glowup, windowpane, typewriter, tty, braille, telly, kaleido, vortex, echo, fluted, onebit, pocket, ledwall, pressrun, fringe, tracking, tubes, vignette, mirror, plotarea, teletext];

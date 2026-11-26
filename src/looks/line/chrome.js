@@ -1,7 +1,9 @@
-// Rows as polished metal tubes reflecting a made-up sky: a bright sky above a sharp
-// horizon, dark ground below, a streak of a key light, all turning with each tube as it
-// bends, and a horizon that ripples like liquid metal with the bass. Best fairly thick.
-import { cross, dot, exp, float, max, min, mix, normalize, reflect, select, sign, sin, smoothstep, varying, vec2, vec3 } from 'three/tsl';
+// Rows as polished metal tubes. Over a backdrop that paints a picture they mirror it, the
+// whole of it bent round each tube; over a plain one they reflect a made-up sky: a bright
+// sky above a sharp horizon, dark ground below. Either way a key light leaves a streak, it
+// all turns with each tube as it bends, and the reflection ripples like liquid metal with
+// the bass. Best fairly thick.
+import { cameraViewMatrix, cross, dot, exp, float, max, min, mix, normalize, reflect, select, sign, sin, smoothstep, varying, vec2, vec3, vec4 } from 'three/tsl';
 import { baseHalf, px, rowGap, signal, smoothLevel, smoothLift, toPixels } from '../lib/line-kit.js';
 
 export default {
@@ -41,9 +43,22 @@ export default {
     const off = r.y.sub(horizonAt).div(0.035);
     const horizon = exp(off.mul(off).negate()).mul(0.8);
     const key = dot(r, normalize(vec3(-0.35, 0.8, 0.5))).max(0).pow(60).mul(signal(c, 'beat').mul(0.8).add(1.2));
-    const env = mix(ground, sky, smoothstep(horizonAt.sub(sharp), horizonAt.add(sharp), r.y)).add(horizon).add(key);
+    const madeUp = mix(ground, sky, smoothstep(horizonAt.sub(sharp), horizonAt.add(sharp), r.y)).add(horizon);
+    // The backdrop's picture as a ball of the same metal would show it: the way the
+    // reflected ray leaves, as the camera sees it, picks the point of the picture. Metal
+    // deepens what it mirrors and lends it a little of its own colour, and the tube's edges,
+    // seen at a glance, catch more light.
+    const mirrored = () => {
+      const leaving = cameraViewMatrix.mul(vec4(r, 0)).xyz;
+      const ripple = sin(vHere.x.mul(0.8).add(c.time.mul(1.7))).mul(0.012).mul(signal(c, 'bass').add(0.3));
+      const at = vec2(leaving.x.mul(0.5).add(0.5), leaving.y.mul(-0.5).add(0.5).add(ripple)).clamp(0.002, 0.998);
+      const seen = c.groundAt(at);
+      const glance = dot(n, vEye).abs().oneMinus().pow(3);
+      return seen.mul(seen.mul(1.8).add(0.8)).mul(mix(vec3(1), c.tint, 0.3)).add(c.tint.mul(glance.mul(0.4).add(0.05))).add(madeUp.mul(0.22));
+    };
+    const env = (c.groundAt ? mirrored() : madeUp).add(key);
     // Kept under half the gap to the next row, so tubes do not pile up when rows are packed.
-    const half = min(baseHalf(c).mul(2.2), rowGap(c).mul(0.42)).max(px(c, 1));
+    const half = min(baseHalf(c).mul(2.6), rowGap(c).mul(0.42)).max(px(c, 1));
     return {
       lift: smoothLift(c),
       width: half.div(baseHalf(c)),
