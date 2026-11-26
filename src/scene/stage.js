@@ -5,8 +5,8 @@
 // the ridge into a drawing; everything else through the `fov` setting. Moving between
 // them keeps the framing, so the ridge holds its size while its depth opens up.
 
-import { Color, PerspectiveCamera, Scene, Vector2, WebGPURenderer } from 'three/webgpu';
-import { uniform } from 'three/tsl';
+import { Color, PerspectiveCamera, RenderPipeline, Scene, Vector2, WebGPURenderer } from 'three/webgpu';
+import { pass, rtt, screenUV, uniform } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { WIDTH } from './ridge-mesh.js';
 import { TARGET_MARGIN, canvasSize, distanceFor, driftPose, mixPose, posterWidth, poseToPosition, positionToPose, safeView } from './view-math.js';
@@ -64,6 +64,8 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
   const camera = new PerspectiveCamera(COVER_FOV, 1, 1, 1000);
   // The front view's direction and the point it looks at follow the ridge's layout.
   let sleeve = true;
+  // The layout's own orbit limits, spin and tilt, as text, to tell when they change.
+  let rigNow = '';
   // Scene height an open layout's front view shows at its target.
   let openFraming = 12.7;
   let front = { ...FRONT };
@@ -131,6 +133,7 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
   let driftAt = 0;
   let dragging = false;
   let lastNow = performance.now();
+  let lastUpdate = lastNow;
 
   // The front pose: on the sleeve, framed so a row is as wide on screen as the poster.
   function home() {
@@ -198,15 +201,33 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
   // the scene height an open layout shows and the point it looks at. The camera keeps its
   // direction, its framing and any pan, except that a change of layout sends it to the new
   // front view.
-  function setLayout({ depth, tilt, sleeve: toSleeve = true, framing = openFraming, target: lookAt = OPEN_TARGET }) {
+  //
+  // A layout may also bring its own limits and motion: `orbit` is `{ azimuth, polar }`, each
+  // a `[least, most]` pair of degrees the camera may turn through (azimuth either side of
+  // straight in front, polar down from straight above), or `'free'` for no limit;
+  // `spin` turns the camera about its target at that many degrees a second while it is
+  // left alone; `ownTilt` says the tilt is the layout's and may be level or straight down.
+  function setLayout({ depth, tilt, ownTilt = false, sleeve: toSleeve = true, framing = openFraming, target: lookAt = OPEN_TARGET, orbit = null, spin = 0 }) {
     const next = toSleeve ? [0, SLEEVE_TARGET_Y, -depth / 2] : [...lookAt];
-    const changed = toSleeve !== sleeve || (!toSleeve && (framing !== openFraming || next.some((n, i) => n !== centre[i])));
+    const rig = JSON.stringify([orbit, spin, ownTilt ? tilt : null]);
+    const changed = toSleeve !== sleeve || rig !== rigNow || (!toSleeve && (framing !== openFraming || next.some((n, i) => n !== centre[i])));
+    rigNow = rig;
+    const azimuth = orbit?.azimuth ?? [-70, 70];
+    const polar = orbit?.polar ?? [20, 88];
+    controls.minAzimuthAngle = azimuth === 'free' ? -Infinity : FRONT.azimuth + rad(azimuth[0]);
+    controls.maxAzimuthAngle = azimuth === 'free' ? Infinity : FRONT.azimuth + rad(azimuth[1]);
+    controls.minPolarAngle = polar === 'free' ? 0.001 : rad(polar[0]);
+    controls.maxPolarAngle = polar === 'free' ? Math.PI - 0.001 : rad(polar[1]);
+    controls.autoRotate = spin !== 0;
+    // The controls' own unit is a full turn every thirty seconds at 2.
+    controls.autoRotateSpeed = spin / 6;
+    const [leastTilt, mostTilt] = ownTilt ? [0, 89.9] : [MIN_TILT, MAX_TILT];
     if (changed && !script) settle();
     const pose = poseNow();
     const panned = changed ? [0, 0, 0] : target().map((n, i) => n - centre[i]);
     sleeve = toSleeve;
     openFraming = framing;
-    front = { azimuth: 0, polar: rad(90 - Math.min(MAX_TILT, Math.max(MIN_TILT, tilt))) };
+    front = { azimuth: 0, polar: rad(90 - Math.min(mostTilt, Math.max(leastTilt, tilt))) };
     centre = next;
     controls.cursor.set(...centre);
     controls.target.set(...centre.map((n, i) => n + panned[i]));
@@ -222,6 +243,54 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
 
   function setBackground(hex) {
     scene.background.set(hex);
+  }
+
+  // The finished picture goes through `entries` in turn (filter entries, see
+  // src/looks/filter), each reading the one before as a texture. With none that do
+  // anything, the scene is drawn straight to the canvas. `context` is what every filter
+  // is given beside the picture.
+  // The scene is drawn into one pass for the stage's life; a pipeline is built over it
+  // while any filter is in use.
+  let scenePass = null;
+  let pipeline = null;
+  // What the filters in use made beside their output: each `{ frame?, dispose? }`, and
+  // the textures made to hand one filter's result to the next.
+  let filtering = [];
+  let handovers = [];
+  function setFilters(entries, context) {
+    for (const made of filtering) made.dispose?.();
+    for (const texture of handovers) texture.dispose?.();
+    filtering = [];
+    handovers = [];
+    const filters = entries.filter((entry) => entry.build);
+    if (filters.length === 0) {
+      if (pipeline) pipeline.dispose();
+      pipeline = null;
+      return;
+    }
+    scenePass ??= pass(scene, camera);
+    let colour = scenePass.getTextureNode('output');
+    let output = colour;
+    filters.forEach((entry, i) => {
+      // Each filter after the first reads the one before from a texture of its own, so a
+      // filter that bends the picture is not lost under the next.
+      if (i > 0) {
+        colour = rtt(output);
+        handovers.push(colour);
+      }
+      // A filter gives back its output node, or `{ output, frame?, dispose? }`.
+      const made = entry.build({ ...context, pass: scenePass, colour, depth: scenePass.getTextureNode('depth'), uv: screenUV, resolution, pixelRatio, renderer, scene, camera: context.camera, sceneCamera: camera });
+      output = made.isNode ? made : made.output;
+      if (!made.isNode) filtering.push(made);
+    });
+    pipeline ??= new RenderPipeline(renderer);
+    pipeline.outputNode = output;
+    pipeline.needsUpdate = true;
+  }
+
+  // `tick` is the frame's `{ seconds, dt, ... }`, for filters that keep time of their own.
+  function frameFilters(tick) {
+    for (const made of filtering) made.frame?.(tick);
   }
 
   function setFov(degrees) {
@@ -271,8 +340,9 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
     dragging = false;
   });
 
-  // Moves the lens and the camera on to `now` (ms), then draws.
-  function render(now = performance.now()) {
+  // Moves the lens and the camera on to `now` (ms), then draws. `placed`, if given, is
+  // called once the camera is where this frame sees from, before anything is drawn.
+  function render(now = performance.now(), placed = null) {
     lastNow = now;
 
     if (lens) {
@@ -307,21 +377,26 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
       place(pose);
       if (script.once && !script.blend) script = null;
     } else {
-      controls.update();
+      // The time step keeps a spinning camera to the same speed on any screen.
+      controls.update(Math.min(Math.max((now - lastUpdate) / 1000, 0), 0.1));
     }
+    lastUpdate = now;
 
     // The clip planes follow the camera, so depth stays precise from far away.
     const distance = camera.position.distanceTo(controls.target);
     camera.near = Math.max(0.5, distance - CLIP_REACH);
     camera.far = distance + CLIP_REACH;
     camera.updateProjectionMatrix();
-    renderer.render(scene, camera);
+    camera.updateMatrixWorld();
+    if (placed) placed(camera);
+    if (pipeline) pipeline.render();
+    else renderer.render(scene, camera);
   }
 
   showCover();
 
   return {
     renderer, scene, camera, controls, backend, resolution, pixelRatio,
-    resize, setBackground, setFov, setDrift, isDrifting, setLayout, getView, setView, resetView, showCover, goLive, render,
+    resize, setBackground, setFilters, frameFilters, setFov, setDrift, isDrifting, setLayout, getView, setView, resetView, showCover, goLive, render,
   };
 }

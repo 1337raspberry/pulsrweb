@@ -12,8 +12,11 @@ import { HistoryRows } from './scene/history-rows.js';
 import { posterWidth } from './scene/view-math.js';
 import { createRidgeMesh, WIDTH as ROW_WIDTH } from './scene/ridge-mesh.js';
 import { createPanel } from './ui/panel.js';
-import { FLOWS, LAYOUTS, SETTINGS, decode, defaults, encode } from './settings.js';
+import { FLOWS, LAYOUTS, PRESET_COLOURS, SETTINGS, decode, defaults, encode } from './settings.js';
 import { PALETTES, findPalette, findGradient } from './palettes.js';
+import { findEntry } from './looks/index.js';
+import { createShared } from './looks/shared.js';
+import { createBackdrop } from './scene/backdrop.js';
 
 const BANDS = 64;
 const WIDTH = BANDS * 2;
@@ -51,9 +54,22 @@ const canShareScreen = canShare && navigator.userAgentData.platform !== 'Linux';
 const ring = new FrameRing(WIDTH);
 const params = { ...PARAMS };
 const ridge = new Ridge(params, BANDS);
+// The uniforms every part of a look reads: time, the sound's signals, the palette's colours.
+const shared = createShared(BANDS);
 let stage = null;
 let mesh = null;
+let backdrop = null;
 let panel = null;
+// Set when the look's slots changed, so the ridge or the filters are rebuilt once, on the
+// next frame, however many settings a preset changed together.
+let staleLook = false;
+let staleFilters = false;
+// The entries of the look in use, for those that do something of their own each frame.
+let looking = [];
+// What is behind the ridge at a screen point, as a colour node: the backdrop's picture, or
+// the background colour.
+let groundAt = () => shared.background;
+let filtering = [];
 // Every setting's value by name; changed only through set().
 const values = defaults();
 // What the ridge draws while nothing is shared.
@@ -260,6 +276,12 @@ function set(name, value) {
       // set, so a setting that holds its value is not started afresh.
       const base = defaults(value, values.palette);
       for (const s of SETTINGS) if (!COLOUR.has(s.name) && !s.sticky && values[s.name] !== base[s.name]) set(s.name, base[s.name]);
+      // A scene brings its colours with it; the other presets leave the colours alone.
+      if (PRESET_COLOURS[value]) {
+        const own = defaults(value);
+        set('palette', own.palette);
+        set('colours', own.colours);
+      }
     }
   } else if (name === 'palette') {
     const palette = findPalette(value);
@@ -274,7 +296,9 @@ function set(name, value) {
   else if (name in PARAMS) ridge.setParams({ [name]: values[name] });
   if (name === 'palette' || name === 'colours') applyPalette();
   if (name in PARAMS || name === 'speed' || name.startsWith('demo')) refill = true;
-  if (name === 'rows' || name === 'spacing' || name === 'tilt' || name === 'preset') applyLayout();
+  if (name === 'shape' || name === 'line' || name === 'tint' || name === 'backdrop') staleLook = true;
+  if (name === 'filter' || name === 'filter2') staleFilters = true;
+  if (name === 'rows' || name === 'spacing' || name === 'tilt' || name === 'preset' || name === 'shape') applyLayout();
   if (name === 'fov' && stage) stage.setFov(values.fov);
   if (name === 'drift' && stage && onStage()) stage.setDrift(values.drift);
   if (name === 'pause') pauseKey?.setAttribute('aria-pressed', String(values.pause));
@@ -283,7 +307,8 @@ function set(name, value) {
 }
 
 // A sleeve layout is fitted to the poster and seen flat on the cover; the others are open.
-const layout = () => LAYOUTS[values.preset] ?? LAYOUTS.division;
+// A shape that is not the flat ridge brings its own.
+const layout = () => findEntry('shape', values.shape).layout ?? LAYOUTS[values.preset] ?? LAYOUTS.division;
 const isSleeve = () => layout().sleeve;
 
 // On the sleeve the line setting is the width at a poster of this many pixels; it is scaled
@@ -305,7 +330,54 @@ function applyLayout() {
   const ratio = sleeve ? (depth * Math.sin(tilt) + PEAK_ROOM * Math.cos(tilt)) / ROW_WIDTH : 1;
   document.documentElement.style.setProperty('--poster-ratio', ratio.toFixed(4));
   document.body.classList.toggle('sleeve', sleeve);
-  if (stage) stage.setLayout({ depth, tilt: values.tilt, sleeve, framing: layout().framing, target: layout().target });
+  const own = layout();
+  if (stage) {
+    stage.setLayout({
+      depth, sleeve, framing: own.framing, target: own.target, orbit: own.orbit, spin: own.spin,
+      tilt: own.tilt ?? values.tilt, ownTilt: own.tilt !== undefined,
+    });
+  }
+}
+
+// Puts the ridge together from the look's slots.
+function applyLook() {
+  staleLook = false;
+  const look = { shape: findEntry('shape', values.shape), line: findEntry('line', values.line), tint: findEntry('tint', values.tint) };
+  const behind = findEntry('backdrop', values.backdrop);
+  // An entry may have changed the palette's colours as it went; with a change of entries
+  // they start again from the palette's own.
+  const entries = [...Object.values(look), behind];
+  if (entries.some((entry, i) => entry !== looking[i])) applyPalette();
+  looking = entries;
+  staleLook = false;
+  const set = backdrop.set(behind);
+  groundAt = set.groundAt;
+  mesh.setLook({ ...look, ground: set.ground, veil: set.veil });
+  // The filters read the backdrop's picture too.
+  staleFilters = true;
+  applyValues();
+}
+
+function applyFilters() {
+  staleFilters = false;
+  filtering = [findEntry('filter', values.filter), findEntry('filter', values.filter2)];
+  stage.setFilters(filtering, { ...shared, ground: groundAt });
+}
+
+// The palette's colours as the look's parts see them. An entry's `frame` may move them
+// away from the palette's own for as long as it is in use.
+function setColours({ background, stops, ink }) {
+  if (background !== undefined) {
+    shared.background.value.set(background);
+    const c = shared.background.value;
+    const light = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b > 0.18 ? 1 : 0;
+    // A look may be built differently for a light background and a dark one.
+    if (light !== shared.light.value) staleLook = true;
+    shared.light.value = light;
+    if (stage) stage.setBackground(shared.background.value);
+  }
+  if (stops) stops.forEach((colour, i) => shared.stops[i].value.set(colour));
+  if (ink !== undefined) shared.ink.value.set(ink);
 }
 
 // Runs the made-up signal for as long as the rows hold, ending now, so the whole ridge
@@ -323,8 +395,7 @@ function applyPalette() {
   style.setProperty('--background', gradient.background);
   style.setProperty('--text', gradient.text);
   gradient.stops.forEach((colour, i) => style.setProperty(`--c${i + 1}`, colour));
-  if (stage) stage.setBackground(gradient.background);
-  if (mesh) mesh.setColours(gradient);
+  setColours({ background: gradient.background, stops: gradient.stops, ink: gradient.text });
 }
 
 function nextPalette() {
@@ -383,8 +454,22 @@ function frame(stamp) {
   // holds still through silence when asked to.
   const held = made ? reducedMotion.matches : values.pause && stamp - heardAt > PAUSE_AFTER_MS;
   if (!held) ridge.advance(stamp / 1000, made ? demo : idle ? quiet : ring);
-  mesh.frame(ridge);
-  stage.render(stamp);
+  if (staleLook) applyLook();
+  if (staleFilters) applyFilters();
+  const seconds = stamp / 1000;
+  const heard = made ? !held : !idle && stamp - heardAt <= PAUSE_AFTER_MS;
+  const dt = shared.update(ridge, seconds, heard);
+  shared.still.value = reducedMotion.matches ? 1 : 0;
+  // What each part of the look is told once a frame.
+  const palette = findPalette(values.palette);
+  const tick = { seconds, dt, heard, shared, values, camera: stage.camera, palette, gradient: findGradient(palette, values.colours), setColours };
+  for (const entry of looking) entry.frame?.(tick);
+  for (const entry of filtering) entry.frame?.(tick);
+  mesh.frame(ridge, tick);
+  backdrop.frame(tick);
+  stage.frameFilters(tick);
+  // The camera's uniforms are written once it has moved for this frame.
+  stage.render(stamp, shared.updateCamera);
   stats.paints += 1;
 }
 
@@ -469,9 +554,12 @@ function start() {
     history: new HistoryRows(ridge.fineCount, ridge.capacity),
     resolution: stage.resolution,
     pixelRatio: stage.pixelRatio,
+    shared,
   });
+  backdrop = createBackdrop({ scene: stage.scene, shared, resolution: stage.resolution, pixelRatio: stage.pixelRatio });
   stage.scene.add(mesh.object);
-  applyValues();
+  applyLook();
+  applyFilters();
   window.addEventListener('resize', applyValues);
   stage.setFov(values.fov);
   stage.controls.enabled = onStage();
@@ -518,9 +606,12 @@ function start() {
     else if (key === 's') startOrStop();
   });
   window.addEventListener('pointermove', status.stir);
+  window.addEventListener('pointermove', (event) => {
+    shared.pointer.value.set(event.clientX / window.innerWidth, event.clientY / window.innerHeight);
+  });
   setInterval(showStats, 500);
   stage.renderer.setAnimationLoop(frame);
 
   // A hook for checking the page from a console.
-  window.pulsr = { ring, ridge, stats, stage, mesh, values, set, panel, report: diagnostics.report, toCover, openIntro, toLive, explain: intro.explain, showGuide: intro.showGuide };
+  window.pulsr = { ring, ridge, stats, stage, mesh, shared, values, set, panel, report: diagnostics.report, toCover, openIntro, toLive, explain: intro.explain, showGuide: intro.showGuide };
 }

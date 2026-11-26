@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:8137/pulsrweb/
+Then open http://localhost:8137/
 
 ## Tests
 

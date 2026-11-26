@@ -54,6 +54,9 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
 
   const basics = SETTINGS.filter((s) => s.group === 'basic');
   const bindings = new Map(basics.map((s) => [s.name, bind(pane, s)]));
+  // What a look is put together from, one list per slot.
+  const look = pane.addFolder({ title: 'look', expanded: true });
+  for (const s of SETTINGS.filter((x) => x.group === 'look')) bind(look, s);
   // The palette the colours list was built for.
   let listed = model.palette;
   const reset = pane.addButton({ title: 'reset view' }).on('click', () => onResetView());

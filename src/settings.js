@@ -1,12 +1,19 @@
 // The settings table, and its encoding into a link fragment (the text after `#`).
 //
-// A visual preset is a set of defaults for everything but colour: the ridge's shape and
-// motion, and the camera. The table's own defaults are the opening preset's, which draws
-// the ridge as a record sleeve; PRESET_VALUES holds what each of the others changes.
-// Colour is apart: the palette and the colours picked from it are the same under any preset.
+// A visual preset is a set of defaults: the ridge's shape and motion, the camera, and the
+// look (the shape the rows are laid on, what a line is made of, how it is coloured, what is
+// behind it and the filters over it). The table's own defaults are the opening preset's,
+// which draws the ridge as a record sleeve; PRESET_VALUES holds what each of the others
+// changes. Colour is apart: the palette and the colours picked from it stay the same from
+// preset to preset, except that a preset listed in PRESET_COLOURS brings its own.
 import { PALETTES, findPalette } from './palettes.js';
+import { SLOTS } from './looks/index.js';
 
-export const PRESETS = ['division', 'immersive', 'inyoface', 'sheet'];
+export const PRESETS = [
+  'division', 'immersive', 'inyoface', 'sheet',
+  '4am', 'nightcall', 'llama', 'lightspeed', 'borealis', 'diorama', 'sumi', 'ttyl', 'redpill', 'openlate',
+  'magma', 'lido', 'funnies', 'blip', 'milkyway', 'plasmaball', 'snowday', 'bside', 'slinky', 'highrise',
+];
 // Which way the rows travel. Away: born at the front with the sound, receding. Towards
 // live: coming at the camera, as if flying forwards, every row showing the live shape.
 export const FLOWS = ['away', 'towards live'];
@@ -19,6 +26,10 @@ const num = (name, def, min, max, step, label = name, group = 'basic') => ({
 const more = (folder) => ({ group: 'more', folder });
 
 const flag = (name, def, folder, label = name) => ({ name, kind: 'boolean', default: def, label, ...more(folder) });
+// A choice among the entries of one of a look's slots; the slot's first is the default.
+const slot = (name, label = name, from = name) => ({
+  name, kind: 'choice', default: SLOTS[from][0].name, label, group: 'look', choices: SLOTS[from].map((entry) => entry.name),
+});
 
 export const SETTINGS = [
   {
@@ -33,6 +44,12 @@ export const SETTINGS = [
     name: 'colours', kind: 'choice', default: PALETTES[0].gradients[0].name, label: 'colours', group: 'basic',
     choicesFor: (paletteName) => findPalette(paletteName).gradients.map((g) => g.name),
   },
+  slot('shape'),
+  slot('line'),
+  slot('tint'),
+  slot('backdrop'),
+  slot('filter'),
+  slot('filter2', 'second filter', 'filter'),
   num('peak', 0.25, 0.05, 1.5, 0.01, 'height'),
   num('speed', 12, 2, 80, 1), // rows per second; rowMs = 1000 / speed
   num('rows', 80, 10, 120, 1, 'depth'),
@@ -79,9 +96,15 @@ export const SETTINGS = [
 
 // One line on what each setting does, in plain words, for the panel to show on hover.
 const HELP = {
-  preset: 'the overall shape, motion and camera, from the record sleeve to a flight through it',
+  preset: 'a whole look at once: shape, motion, camera, and for the scenes their own colours',
   palette: 'the family of colour schemes to pick colours from',
   colours: 'the background and the blend of colours along the lines',
+  shape: 'what the rows are laid out on: a flat plane, or something else entirely',
+  line: 'what each line is made of, and what fills the space under it',
+  tint: 'how colours from the palette are spread over the lines, and how they change',
+  backdrop: 'what is behind and around the ridge',
+  filter: 'an effect over the whole finished picture',
+  filter2: 'another effect, applied after the first',
   peak: 'how tall the loudest peaks stand',
   speed: 'how many new lines are drawn each second',
   rows: 'how many lines are on screen, front to back',
@@ -123,32 +146,136 @@ const IMMERSIVE = {
   peak: 0.6, speed: 30, rows: 51, lineWidth: 1.25, noise: 0, span: 1,
   spacing: 0.38, depthScale: 0.39, fadeCurve: 0.75, alpha: 0.85, tilt: 18,
 };
+const SHEET = { ...IMMERSIVE, tilt: 2, flow: 'towards live', trench: 0.25, rows: 100, speed: 50 };
 // What each preset changes from the table. `inyoface` is pulsr's own from close in and
 // almost level; `sheet` stands further back from rows that come at the camera, all showing
-// the live shape, so their near edge is in view.
+// the live shape, so their near edge is in view. The scenes after those four are whole
+// looks: one entry from each of the look's slots, the settings that suit them, and (in
+// PRESET_COLOURS) a palette.
 const PRESET_VALUES = {
   division: {},
   immersive: IMMERSIVE,
   inyoface: { ...IMMERSIVE, tilt: 2 },
-  sheet: { ...IMMERSIVE, tilt: 2, flow: 'towards live', trench: 0.25, rows: 100, speed: 50 },
+  sheet: SHEET,
+  // A city of towers, one per band, seen through a rainy window late at night.
+  '4am': {
+    ...IMMERSIVE, line: 'skyline', backdrop: 'cityglow', filter: 'windowpane', filter2: 'glowup',
+    rows: 30, spacing: 0.5, speed: 8, peak: 0.55, attack: 0.5, decay: 0.3, fadeCurve: 1, tilt: 8, fov: 35,
+  },
+  // A night drive down a winding road towards a banded sun.
+  nightcall: { ...SHEET, shape: 'joyride', tint: 'onetwo', backdrop: 'retrosun', filter: 'glowup' },
+  // The ridge smeared and folded into a turning kaleidoscope, the colours drifting through
+  // the palette, as the media players' visualisers did.
+  llama: { ...IMMERSIVE, line: 'neon', tint: 'chameleon', filter: 'echo', filter2: 'kaleido', lineWidth: 2 },
+  // Flying down a tunnel made of the last few seconds.
+  lightspeed: { ...SHEET, shape: 'wormhole', tint: 'prism', filter: 'glowup', filter2: 'fringe', fov: 45 },
+  // Northern lights over the ridge and rising off it, mirrored in a still lake.
+  borealis: {
+    ...IMMERSIVE, shape: 'puddle', line: 'veils', tint: 'borealis', backdrop: 'aurora',
+    rows: 40, speed: 12, peak: 0.5, attack: 0.3, decay: 0.2,
+  },
+  // A shadow box of cut-card hills against an evening sky.
+  diorama: {
+    ...IMMERSIVE, line: 'papercut', backdrop: 'dusk', filter: 'vignette',
+    rows: 16, spacing: 0.6, peak: 0.45, depthScale: 1.3, speed: 4, smooth: 0.5, spread: 3, edgeTaper: 0.1,
+    fadeCurve: 0, alpha: 1, tilt: 10, fov: 22,
+  },
+  // Mountains brushed in ink, paling into mist on paper under a red sun.
+  sumi: {
+    ...IMMERSIVE, line: 'nib', tint: 'haze', backdrop: 'smokies',
+    rows: 24, spacing: 0.5, peak: 0.5, depthScale: 1.4, speed: 5, attack: 0.3, decay: 0.2, smooth: 0.4, spread: 2.5,
+    grain: 0, fadeCurve: 0.5, alpha: 1, tilt: 10, fov: 25,
+  },
+  // The ridge as a terminal draws it, on an old television.
+  ttyl: { ...IMMERSIVE, filter: 'tty', filter2: 'telly' },
+  // Falling code, and the ridge standing in it.
+  redpill: { ...IMMERSIVE, backdrop: 'glyphfall', filter: 'glowup', lineWidth: 1.5 },
+  // A few rows bent from neon tube, each beat lighting a new colour.
+  openlate: {
+    ...IMMERSIVE, tint: 'onetwo', filter: 'tubes', filter2: 'vignette',
+    rows: 10, spacing: 0.6, speed: 3, lineWidth: 3, fadeCurve: 0, alpha: 1, tilt: 4, fov: 30,
+  },
+  // Rows born molten that cool and crust over as they go back, throwing sparks.
+  magma: { ...IMMERSIVE, line: 'sparks', tint: 'embers', backdrop: 'cinders', filter: 'glowup', peak: 0.55, tilt: 8 },
+  // Satin ribbons over the bottom of a sunlit swimming pool.
+  lido: {
+    ...IMMERSIVE, line: 'ribbon', tint: 'oilslick', backdrop: 'deepend',
+    lineWidth: 3, rows: 30, spacing: 0.5, speed: 12,
+  },
+  // The ridge printed on cheap newsprint, the plates jumping on every hit.
+  funnies: {
+    ...IMMERSIVE, tint: 'onetwo', filter: 'pressrun', filter2: 'fringe', lineWidth: 3, rows: 30, spacing: 0.5,
+  },
+  // A radar screen: the history sweeping round the dial in phosphor green.
+  blip: { ...IMMERSIVE, shape: 'radar', line: 'scope', tint: 'p7', filter: 'telly' },
+  // A spiral galaxy of sound under a sky full of stars.
+  milkyway: { ...IMMERSIVE, shape: 'galaxy', line: 'fairy', tint: 'prism', backdrop: 'stargazer', filter: 'glowup' },
+  // Lightning crawling over a glass ball.
+  plasmaball: { ...IMMERSIVE, shape: 'marble', line: 'zap', filter: 'glowup' },
+  // Sheets of ice on a little planet in the snow.
+  snowday: { ...IMMERSIVE, shape: 'smallworld', line: 'glass', backdrop: 'flurry', filter: 'vignette' },
+  // A record turning under strings of fairy lights.
+  bside: { ...IMMERSIVE, shape: 'vinyl', line: 'fairy', tint: 'prism', filter: 'vignette' },
+  // The ridge rolling itself up into a coil of polished metal.
+  slinky: { ...IMMERSIVE, shape: 'rollup', line: 'chrome', lineWidth: 3 },
+  // A tower of lit windows, the history climbing its sides.
+  highrise: { ...IMMERSIVE, shape: 'totem', line: 'skyline', filter: 'glowup' },
+};
+// A preset that is a whole scene comes with colours of its own: a palette, and the entry
+// of it to use. Picking the preset picks them; they can be changed afterwards like any other.
+export const PRESET_COLOURS = {
+  '4am': { palette: 'tokyo-night', colours: 'blue-red' },
+  nightcall: { palette: 'dracula', colours: 'purple-orange' },
+  llama: { palette: 'dracula', colours: 'cyan-pink' },
+  lightspeed: { palette: 'catppuccin', colours: 'mocha blue-pink' },
+  borealis: { palette: 'nord', colours: 'aurora' },
+  diorama: { palette: 'rose-pine', colours: 'dawn gold-love' },
+  sumi: { palette: 'rose-pine', colours: 'dawn black' },
+  ttyl: { palette: 'greyscale', colours: 'grey-white' },
+  redpill: { palette: 'catppuccin', colours: 'mocha green-sapphire' },
+  openlate: { palette: 'tokyo-night', colours: 'magenta-orange' },
+  magma: { palette: 'kanagawa', colours: 'yellow-red' },
+  lido: { palette: 'catppuccin', colours: 'latte green-sapphire' },
+  funnies: { palette: 'solarized', colours: 'light blue-magenta' },
+  blip: { palette: 'gotham', colours: 'cyan-white' },
+  milkyway: { palette: 'ayu', colours: 'blue-purple' },
+  plasmaball: { palette: 'rose-pine', colours: 'iris-love' },
+  snowday: { palette: 'nord', colours: 'frost' },
+  bside: { palette: 'rose-pine', colours: 'moon gold-love' },
+  slinky: { palette: 'greyscale', colours: 'silver' },
+  highrise: { palette: 'tokyo-night', colours: 'teal-blue' },
 };
 // How each preset is laid out for the camera: as the sleeve, or open, showing `framing`
 // of the scene's height at the point its front view looks at (`target`, where it has its own).
+// A preset whose shape brings a layout of its own needs none here.
 export const LAYOUTS = {
   division: { sleeve: true },
   immersive: { sleeve: false, framing: 12.7 },
   inyoface: { sleeve: false, framing: 7.7 },
   sheet: { sleeve: false, framing: 15.75, target: [0, 3, -7] },
+  '4am': { sleeve: false, framing: 10, target: [0, 2.5, -6] },
+  llama: { sleeve: false, framing: 12.7 },
+  diorama: { sleeve: false, framing: 9, target: [0, 2, -4.5] },
+  sumi: { sleeve: false, framing: 9.5, target: [0, 2.5, -5.5] },
+  ttyl: { sleeve: false, framing: 12.7 },
+  redpill: { sleeve: false, framing: 12.7 },
+  openlate: { sleeve: false, framing: 8, target: [0, 2, -2] },
+  magma: { sleeve: false, framing: 11.5 },
+  lido: { sleeve: false, framing: 11, target: [0, 2, -5] },
+  funnies: { sleeve: false, framing: 11, target: [0, 2, -5] },
 };
 
 const BY_NAME = new Map(SETTINGS.map((s) => [s.name, s]));
 
-// Every setting's default under `preset` and `palette`. A palette comes with its first
-// gradient.
-export function defaults(preset = OPENING_PRESET, palette = OPENING_PALETTE) {
+// Every setting's default under `preset` and `palette`. Without a palette, the preset's
+// own or the opening one. A palette comes with its first gradient, unless it is the
+// preset's own and the preset names another.
+export function defaults(preset = OPENING_PRESET, palette = PRESET_COLOURS[preset]?.palette ?? OPENING_PALETTE) {
   const base = Object.fromEntries(SETTINGS.map((s) => [s.name, s.default]));
   const shaped = preset in PRESET_VALUES ? { ...base, ...PRESET_VALUES[preset], preset } : base;
-  return { ...shaped, palette, colours: findPalette(palette).gradients[0].name };
+  const own = PRESET_COLOURS[preset];
+  const colours = own?.palette === palette && own.colours ? own.colours : findPalette(palette).gradients[0].name;
+  return { ...shaped, palette, colours };
 }
 
 const decimals = (step) => (String(step).split('.')[1] ?? '').length;
@@ -158,12 +285,14 @@ function writeValue(s, v) {
   return String(v);
 }
 
-// Fragment text without the `#`: the preset and palette unless they are the opening ones,
+// Fragment text without the `#`: the preset unless it is the opening one, the palette
+// unless it is the one the preset comes with,
 // the settings that differ from their defaults under those two, then the camera view.
 export function encode(values, view) {
   const parts = [];
-  const base = defaults(values.preset ?? OPENING_PRESET, values.palette ?? OPENING_PALETTE);
-  const opening = { preset: OPENING_PRESET, palette: OPENING_PALETTE };
+  const preset = values.preset ?? OPENING_PRESET;
+  const base = defaults(preset, values.palette ?? defaults(preset).palette);
+  const opening = { preset: OPENING_PRESET, palette: defaults(preset).palette };
   for (const s of SETTINGS) {
     const v = values[s.name];
     if (v === undefined) continue;
@@ -235,7 +364,7 @@ export function decode(fragment) {
     }
   }
   if ('colours' in values) {
-    const palette = values.palette ?? OPENING_PALETTE;
+    const palette = values.palette ?? defaults(values.preset).palette;
     if (!BY_NAME.get('colours').choicesFor(palette).includes(values.colours)) delete values.colours;
   }
   return { values, view };

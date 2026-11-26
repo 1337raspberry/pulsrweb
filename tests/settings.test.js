@@ -1,11 +1,14 @@
 import { expect, test } from 'vitest';
-import { FLOWS, LAYOUTS, OPENING_PALETTE, OPENING_PRESET, PRESETS, SETTINGS, decode, defaults, encode } from '../src/settings.js';
-import { PALETTES } from '../src/palettes.js';
+import {
+  FLOWS, LAYOUTS, OPENING_PALETTE, OPENING_PRESET, PRESETS, PRESET_COLOURS, SETTINGS, decode, defaults, encode,
+} from '../src/settings.js';
+import { PALETTES, findPalette } from '../src/palettes.js';
+import { findEntry } from '../src/looks/index.js';
 
 const byName = Object.fromEntries(SETTINGS.map((s) => [s.name, s]));
 
-test('the table has the 36 settings', () => {
-  expect(SETTINGS.length).toBe(36);
+test('the table has the 42 settings', () => {
+  expect(SETTINGS.length).toBe(42);
   expect(byName.peak).toMatchObject({ default: 0.25, min: 0.05, max: 1.5, step: 0.01, label: 'height', group: 'basic' });
   expect(byName.gamma).toMatchObject({ group: 'more', folder: 'music reactivity' });
   expect(byName.lineWidth).toMatchObject({ label: 'line width', group: 'more', folder: 'shape' });
@@ -29,7 +32,7 @@ test('every setting says what it does in one short line', () => {
 test('defaults encode to nothing', () => expect(encode(defaults(), null)).toBe(''));
 
 test('the opening preset has the sleeve’s defaults, and immersive pulsr’s own', () => {
-  expect(PRESETS).toEqual(['division', 'immersive', 'inyoface', 'sheet']);
+  expect(PRESETS.slice(0, 4)).toEqual(['division', 'immersive', 'inyoface', 'sheet']);
   expect([OPENING_PRESET, OPENING_PALETTE]).toEqual(['division', 'greyscale']);
   expect(defaults()).toMatchObject({
     preset: 'division', palette: 'greyscale', colours: 'white', rows: 80, speed: 12, peak: 0.25, span: 0.7, fadeCurve: 0, tilt: 40,
@@ -60,11 +63,34 @@ test('the closer presets are pulsr’s own from another seat', () => {
   for (const preset of PRESETS) expect(defaults(preset).drift, preset).toBe(false);
 });
 
+test('the scenes are named, each once, in lower case', () => {
+  expect(PRESETS.length).toBeGreaterThanOrEqual(20);
+  expect(new Set(PRESETS).size).toBe(PRESETS.length);
+  for (const preset of PRESETS) expect(preset).toMatch(/^[a-z0-9]{2,12}$/);
+});
+
+test('a scene brings colours that exist, and its link is its name alone', () => {
+  for (const [preset, own] of Object.entries(PRESET_COLOURS)) {
+    expect(PRESETS, preset).toContain(preset);
+    const palette = findPalette(own.palette);
+    expect(palette.name, preset).toBe(own.palette);
+    expect(palette.gradients.map((g) => g.name), preset).toContain(own.colours);
+    expect(defaults(preset), preset).toMatchObject({ palette: own.palette, colours: own.colours });
+  }
+  for (const preset of PRESETS.slice(1)) {
+    expect(encode(defaults(preset), null), preset).toBe(`preset=${preset}`);
+    const { values } = decode(`preset=${preset}`);
+    expect({ ...defaults(values.preset, values.palette), ...values }, preset).toEqual(defaults(preset));
+  }
+});
+
 test('every preset has a layout, and a setting within range for each default', () => {
   for (const preset of PRESETS) {
-    const layout = LAYOUTS[preset];
-    expect(layout.sleeve || layout.framing > 0, preset).toBeTruthy();
     const d = defaults(preset);
+    // A shape with a layout of its own brings it; on the flat ridge the preset names one.
+    const layout = findEntry('shape', d.shape).layout ?? LAYOUTS[preset];
+    expect(layout, preset).toBeDefined();
+    expect(layout.sleeve || layout.framing > 0, preset).toBeTruthy();
     for (const s of SETTINGS) {
       if (s.kind === 'number') {
         expect(d[s.name], `${preset} ${s.name}`).toBeGreaterThanOrEqual(s.min);
@@ -90,7 +116,9 @@ test('colour is apart from the preset', () => {
   for (const preset of PRESETS) {
     const { palette, colours, ...shape } = defaults(preset, 'nord');
     const { palette: p0, colours: c0, ...shape0 } = defaults(preset);
-    expect([palette, colours]).toEqual(['nord', 'frost']);
+    // A scene whose own palette is the one asked for keeps its own entry of it.
+    const own = PRESET_COLOURS[preset]?.palette === 'nord' ? PRESET_COLOURS[preset].colours : 'frost';
+    expect([palette, colours], preset).toEqual(['nord', own]);
     expect(shape).toEqual(shape0);
   }
   // A preset changes nothing about colour.
