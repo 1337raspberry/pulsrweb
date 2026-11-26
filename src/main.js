@@ -17,7 +17,7 @@ import { HistoryRows } from './scene/history-rows.js';
 import { posterWidth } from './scene/view-math.js';
 import { createRidgeMesh, WIDTH as ROW_WIDTH } from './scene/ridge-mesh.js';
 import { createPanel } from './ui/panel.js';
-import { FLOWS, LAYOUTS, PRESET_COLOURS, SETTINGS, decode, defaults, encode } from './settings.js';
+import { FLOWS, LAYOUTS, PRESETS, PRESET_COLOURS, SETTINGS, decode, defaults, encode } from './settings.js';
 import { PALETTES, findPalette, findGradient } from './palettes.js';
 import { findEntry } from './looks/index.js';
 import { createShared } from './looks/shared.js';
@@ -575,6 +575,12 @@ function nextPalette() {
   set('palette', PALETTES[(i + 1) % PALETTES.length].name);
 }
 
+// The preset `by` places along the list from the one in use, coming round at either end.
+function stepPreset(by) {
+  const i = Math.max(PRESETS.indexOf(values.preset), 0);
+  set('preset', PRESETS[(i + by + PRESETS.length) % PRESETS.length]);
+}
+
 function nextColours() {
   const gradients = findPalette(values.palette).gradients;
   const i = gradients.indexOf(findGradient(findPalette(values.palette), values.colours));
@@ -795,6 +801,12 @@ function start() {
     if (key.length === 1 && 'tgpfvdsqonib'.includes(key) && event.target instanceof HTMLSelectElement) {
       event.preventDefault();
       event.target.blur();
+    }
+    // Up and down step through the presets, except where the arrows belong to a list, a
+    // menu or one of the options' sliders.
+    if ((key === 'arrowup' || key === 'arrowdown') && !event.target.closest?.('select, menu, .tp-sldv_t')) {
+      event.preventDefault();
+      stepPreset(key === 'arrowup' ? -1 : 1);
     }
     if (key === 't') nextPalette();
     else if (key === 'g') nextColours();

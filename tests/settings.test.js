@@ -33,7 +33,7 @@ test('every setting says what it does in one short line', () => {
 test('defaults encode to nothing', () => expect(encode(defaults(), null)).toBe(''));
 
 test('the opening preset has the sleeve’s defaults, and immersive pulsr’s own', () => {
-  expect(PRESETS.slice(0, 4)).toEqual(['division', 'immersive', 'closeup', 'sheet']);
+  expect(PRESETS.slice(0, 3)).toEqual(['division', 'immersive', 'closeup']);
   expect([OPENING_PRESET, OPENING_PALETTE]).toEqual(['division', 'greyscale']);
   expect(defaults()).toMatchObject({
     preset: 'division', palette: 'greyscale', colours: 'white', rows: 80, speed: 12, peak: 0.25, span: 0.7, fadeCurve: 0, tilt: 40,
@@ -93,7 +93,7 @@ test('a scene brings colours that exist, and its link is its name alone', () => 
 });
 
 test('a shelved scene is not offered, and a link to it opens the opening preset', () => {
-  expect(SHELVED).toEqual(['milkyway']);
+  expect(SHELVED).toEqual(['milkyway', 'sheet', 'highrise']);
   for (const preset of SHELVED) {
     expect(PRESETS, preset).not.toContain(preset);
     expect(decode(`preset=${preset}`).values.preset, preset).toBeUndefined();

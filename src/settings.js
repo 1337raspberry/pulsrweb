@@ -10,12 +10,14 @@ import { PALETTES, findPalette } from './palettes.js';
 import { SLOTS } from './looks/index.js';
 
 export const PRESETS = [
-  'division', 'immersive', 'closeup', 'sheet',
-  '4am', 'nightcall', 'llama', 'lightspeed', 'borealis', 'diorama', 'sumi', 'ttyl', 'redpill', 'openlate',
-  'magma', 'lido', 'funnies', 'blip', 'plasmaball', 'snowday', 'bside', 'slinky', 'highrise', 'vlookup', 'p100',
+  'division', 'immersive', 'closeup',
+  'sumi', 'vlookup', 'blip', 'borealis', 'magma', 'diorama', 'funnies', 'lightspeed', '4am', 'p100', 'openlate',
+  'lido', 'nightcall', 'llama', 'redpill', 'snowday', 'bside', 'ttyl', 'plasmaball', 'slinky',
 ];
-// Scenes that are kept below but not offered for now: a link to one opens the opening preset.
-export const SHELVED = ['milkyway'];
+// Presets that are kept below but not offered for now: a link to one opens the opening preset.
+// What they are made of (the towards-live flow and the trench, the totem shape, the skyline
+// line) stays in the options.
+export const SHELVED = ['milkyway', 'sheet', 'highrise'];
 // Which way the rows travel. Away: born at the front with the sound, receding. Towards
 // live: coming at the camera, as if flying forwards, every row showing the live shape.
 export const FLOWS = ['away', 'towards live'];
@@ -155,7 +157,7 @@ const IMMERSIVE = {
 const SHEET = { ...IMMERSIVE, tilt: 2, flow: 'towards live', trench: 0.25, rows: 100, speed: 50 };
 // What each preset changes from the table. `closeup` is pulsr's own through a wide lens
 // from close in and almost level; `sheet` stands further back from rows that come at the camera, all showing
-// the live shape, so their near edge is in view. The scenes after those four are whole
+// the live shape, so their near edge is in view. The scenes after those are whole
 // looks: one entry from each of the look's slots, the settings that suit them, and (in
 // PRESET_COLOURS) a palette.
 const PRESET_VALUES = {
