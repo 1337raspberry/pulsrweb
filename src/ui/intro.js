@@ -33,13 +33,20 @@ export const GUIDES = {
   },
 };
 
+// What the opening words say in a browser that cannot share a tab.
+const LEDE_ELSEWHERE =
+  'interactive 3d pulsar burst visualiser. sharing a tab’s sound is chrome only soz, but your own music files play in any browser';
+
 // The introduction: three steps, one on screen at a time. The first says what pulsr is
 // and offers a tab or, where the browser can pass on the whole computer's sound
 // (`canShareScreen`), the screen; either leads to "go and play something", "ready" leads
 // to a picture of the browser's picker, and "share" opens the real one. The later steps
-// show only their own words. `onStart(route)` gets 'tab', 'screen' or 'mic'; `onClose()`
-// is called when the visitor backs out.
-export function createIntro({ canShare, canShareScreen, onStart, onClose }) {
+// show only their own words. Beside the first step, and in place of all three where the
+// browser cannot share a tab, are the ways in that every browser has: the visitor's own
+// files, and an input such as the microphone. `hearsItself` says the browser lists the
+// computer's own sound among its inputs. `onStart(route)` gets 'tab', 'screen', 'files'
+// or 'mic'; `onClose()` is called when the visitor backs out.
+export function createIntro({ canShare, canShareScreen, hearsItself = false, onStart, onClose }) {
   // The way of sharing the picture describes and the share button starts.
   let chosen = 'tab';
   let step = 1;
@@ -82,7 +89,9 @@ export function createIntro({ canShare, canShareScreen, onStart, onClose }) {
   }
 
   function setBusy(busy) {
-    for (const id of ['start', 'startscreen', 'ready', 'sharenow', 'switch', 'usemic']) $(id).disabled = busy;
+    for (const id of ['start', 'startscreen', 'ready', 'sharenow', 'switch', 'usefiles', 'usemic', 'usemonitor', 'alsofiles', 'alsomic']) {
+      $(id).disabled = busy;
+    }
   }
 
   // Opens at `at`, or where it was left. `notice` is a line about what just went wrong.
@@ -108,7 +117,8 @@ export function createIntro({ canShare, canShareScreen, onStart, onClose }) {
 
   // Says what went wrong with a share and what to do about it.
   function explain(route, result) {
-    if (result.why === 'cancelled') return 'Nothing was shared.';
+    if (result.why === 'nofiles') return 'None of those were music files.';
+    if (result.why === 'cancelled') return route === 'mic' ? 'No input was allowed.' : 'Nothing was shared.';
     if (result.why === 'blocked') {
       return (
         'macOS blocked the share. Allow Chrome under System Settings, Privacy & Security, ' +
@@ -138,7 +148,8 @@ export function createIntro({ canShare, canShareScreen, onStart, onClose }) {
   $('switch').addEventListener('click', () => showGuide(chosen === 'tab' ? 'screen' : 'tab'));
   $('ready').addEventListener('click', () => setStep(3));
   $('sharenow').addEventListener('click', () => onStart(chosen));
-  $('usemic').addEventListener('click', () => onStart('mic'));
+  for (const id of ['usefiles', 'alsofiles']) $(id).addEventListener('click', () => onStart('files'));
+  for (const id of ['usemic', 'usemonitor', 'alsomic']) $(id).addEventListener('click', () => onStart('mic'));
   $('back').addEventListener('click', () => onClose());
 
   $('m-site').textContent = location.host;
@@ -146,8 +157,10 @@ export function createIntro({ canShare, canShareScreen, onStart, onClose }) {
   $('wider').hidden = !canShareScreen;
   $('nowider').hidden = canShareScreen;
   $('other').hidden = !canShareScreen;
-  // Without tab sharing, the microphone is the one way in.
+  // Without tab sharing, files and inputs are the ways in.
   $('fallback').hidden = canShare;
+  $('monitor').hidden = !hearsItself;
+  if (!canShare) $('lede').textContent = LEDE_ELSEWHERE;
   setStep(1);
 
   return { open, hide, fail, setBusy, showGuide, explain };

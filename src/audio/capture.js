@@ -1,3 +1,4 @@
+import { listInputs } from './inputs.js';
 import { startTestSignal } from './test-signal.js';
 
 export const ms = (seconds) => (Number.isFinite(seconds) ? `${(seconds * 1000).toFixed(1)} ms` : 'unknown');
@@ -42,10 +43,27 @@ function pickerOptions(route) {
   };
 }
 
-// Gets sound into the analyser worklet from a shared tab or screen, the microphone or
-// the built-in test signal. `onFrames` gets each message the analyser posts, `onEnded`
-// is called when the share is stopped from outside the page.
-export function createCapture({ onFrames, onEnded, log }) {
+// What an input is asked for: the sound as it is, in stereo, with none of the clean-up a
+// call wants, from `deviceId` or, without one, whichever input the browser offers.
+const inputOptions = (deviceId) => ({
+  audio: {
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+    channelCount: 2,
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+  },
+});
+
+// How long a start that no click led to waits for the browser to let sound run, in ms.
+const UNASKED_WAIT_MS = 250;
+
+// Gets sound into the analyser worklet from a shared tab or screen, an input such as the
+// microphone, the visitor's own files or the built-in test signal. `onFrames` gets each
+// message the analyser posts. `onEnded(notice)` is called when the sound stops from
+// outside the page, or when no file would play, with a line saying so. `onTrack` is told
+// each file as it comes up: { name, index, count }.
+export function createCapture({ onFrames, onEnded, onTrack = () => {}, log }) {
   let context = null;
   let analyser = null;
   let monitor = null;
@@ -54,6 +72,16 @@ export function createCapture({ onFrames, onEnded, log }) {
   let stream = null;
   let kind = 'none';
   let stopSignal = null;
+  // The name of the input in use and its id, for telling it from the others on offer.
+  let label = '';
+  let inputId = '';
+  // The page's own player, made once: an audio element and the node that brings it into
+  // the context. With it, the files in line, which is up, and how many in a row would
+  // not play.
+  let player = null;
+  let queue = [];
+  let at = 0;
+  let broken = 0;
   let audible = false;
   let pendingOnset = null;
   // Frames and loudest peak seen since the last reset, for the video-drop check.
@@ -71,8 +99,10 @@ export function createCapture({ onFrames, onEnded, log }) {
   }
 
   // Builds the context and analyser once; a failed attempt leaves nothing behind, so the
-  // next call starts over.
-  async function ensureAudio() {
+  // next call starts over. A browser holds a context still until the page has been
+  // clicked: a start that a click led to waits for it to run, and one that came unasked
+  // (a file dropped on the page) waits only a moment and reports through `wake`.
+  async function ensureAudio(asked = true) {
     if (!context) {
       const fresh = new AudioContext({ latencyHint: 'interactive' });
       let node;
@@ -102,7 +132,10 @@ export function createCapture({ onFrames, onEnded, log }) {
           `output latency ${ms(context.outputLatency)}`,
       );
     }
-    if (context.state !== 'running') await context.resume();
+    if (context.state === 'running') return;
+    const resumed = context.resume();
+    if (asked) await resumed;
+    else await Promise.race([resumed.catch(() => {}), sleep(UNASKED_WAIT_MS)]);
   }
 
   function stop() {
@@ -114,12 +147,16 @@ export function createCapture({ onFrames, onEnded, log }) {
     input = null;
     if (stream) for (const track of stream.getTracks()) track.stop();
     stream = null;
+    label = '';
+    inputId = '';
+    // Back to the browser's own choice of how the page's sound mixes with the system's.
+    if (kind === 'files' && navigator.audioSession) navigator.audioSession.type = 'auto';
     if (kind !== 'none') log(`stopped: ${kind}`);
     kind = 'none';
   }
 
   // Wires a granted stream to the analyser. A stream without sound is given back.
-  function attach(granted, label) {
+  function attach(granted, name) {
     const [audio] = granted.getAudioTracks();
     const [video] = granted.getVideoTracks();
     const surface = video ? video.getSettings().displaySurface : undefined;
@@ -158,7 +195,9 @@ export function createCapture({ onFrames, onEnded, log }) {
       stop();
       throw error;
     }
-    kind = surface ? `${label} (${surface})` : label;
+    kind = surface ? `${name} (${surface})` : name;
+    label = audio.label;
+    inputId = audio.getSettings().deviceId || '';
     return { ok: true, surface };
   }
 
@@ -204,17 +243,17 @@ export function createCapture({ onFrames, onEnded, log }) {
     return attach(granted, route === 'tab' ? 'shared tab' : 'shared audio');
   }
 
-  async function microphone() {
+  const refused = (error) => {
+    log(`input failed: ${error.name}: ${error.message}`);
+    return { ok: false, why: error.name === 'NotAllowedError' ? 'cancelled' : 'error', error };
+  };
+
+  // Listens through an input: the one with `deviceId`, or whichever the browser offers.
+  async function microphone(deviceId) {
     stop();
-    const failed = (error) => {
-      log(`microphone failed: ${error.name}: ${error.message}`);
-      return { ok: false, why: error.name === 'NotAllowedError' ? 'cancelled' : 'error', error };
-    };
     let pending = null;
     try {
-      pending = navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 },
-      });
+      pending = navigator.mediaDevices.getUserMedia(inputOptions(deviceId));
       // A refusal is read below; this keeps it from counting as unhandled in the meantime.
       pending.catch(() => {});
       await ensureAudio();
@@ -223,13 +262,120 @@ export function createCapture({ onFrames, onEnded, log }) {
       pending?.then((granted) => {
         for (const track of granted.getTracks()) track.stop();
       }, () => {});
-      return failed(error);
+      return refused(error);
     }
     try {
       return attach(await pending, 'microphone');
     } catch (error) {
-      return failed(error);
+      return refused(error);
     }
+  }
+
+  // Moves to another input while one is in use, which stays if the new one is refused.
+  async function switchInput(deviceId) {
+    let granted;
+    try {
+      granted = await navigator.mediaDevices.getUserMedia(inputOptions(deviceId));
+    } catch (error) {
+      return refused(error);
+    }
+    stop();
+    try {
+      return attach(granted, 'microphone');
+    } catch (error) {
+      return refused(error);
+    }
+  }
+
+  // The inputs on offer, as { id, label, loopback }. Empty until one has been allowed.
+  async function inputs() {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    try {
+      return listInputs(await navigator.mediaDevices.enumerateDevices());
+    } catch {
+      return [];
+    }
+  }
+
+  // Starts the element playing and says how it went: true, or the name of what stopped it.
+  const play = () => player.element.play().then(() => true, (error) => error.name);
+
+  // Puts the file that is up into the player and starts it.
+  function load() {
+    const file = queue[at];
+    if (player.url) URL.revokeObjectURL(player.url);
+    player.url = URL.createObjectURL(file);
+    player.element.src = player.url;
+    log(`file ${at + 1} of ${queue.length}: ${file.type || 'no type given'}, ${Math.round(file.size / 1024)} kB`);
+    onTrack({ name: file.name, index: at, count: queue.length });
+    return play();
+  }
+
+  // On to the next file, or back, round the end of the line.
+  function advance(step) {
+    at = (at + step + queue.length) % queue.length;
+    return load();
+  }
+
+  // A file the browser cannot play is passed over. When none of them will, it stops.
+  function skip() {
+    broken += 1;
+    log(`file ${at + 1} would not play: ${player.element.error?.message || 'unknown format'}`);
+    if (broken < queue.length) {
+      advance(1);
+      return;
+    }
+    stop();
+    queue = [];
+    onEnded('None of those files would play in this browser.');
+  }
+
+  // Plays the visitor's own files through the page, one after another and round again,
+  // analysing them on the way to the speakers. With no `list` it carries on from where the
+  // last one was stopped. `waiting` in the answer means the browser wants a click before
+  // it lets sound play, and `wake` is to be called from that click.
+  async function files(list) {
+    stop();
+    if (list) {
+      queue = list;
+      at = 0;
+    }
+    if (queue.length === 0) return { ok: false, why: 'nofiles' };
+    kind = 'files';
+    const fresh = !!list || !player;
+    if (!player) {
+      const element = new Audio();
+      element.addEventListener('ended', () => kind === 'files' && advance(1));
+      element.addEventListener('error', () => kind === 'files' && skip());
+      element.addEventListener('playing', () => (broken = 0));
+      player = { element, node: null, url: null };
+    }
+    stopSignal = () => player.element.pause();
+    // Without this an iPhone's silent switch mutes the page.
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    broken = 0;
+    // Started before the first wait, while the click that led here still counts.
+    const started = fresh ? load() : play();
+    await ensureAudio(false);
+    // An element feeds one node for life, so the node is made once and kept.
+    if (!player.node) player.node = context.createMediaElementSource(player.element);
+    player.node.connect(analyser);
+    player.node.connect(context.destination);
+    input = player.node;
+    const waiting = context.state !== 'running' || (await started) === 'NotAllowedError';
+    if (waiting) log('the browser wants a click before it plays');
+    return { ok: true, waiting };
+  }
+
+  function nextFile() {
+    if (kind === 'files' && queue.length > 1) advance(1);
+  }
+
+  // Called from a click: lets the sound run where the browser was holding it back.
+  async function wake() {
+    if (!context) return;
+    if (context.state !== 'running') await context.resume();
+    if (kind === 'files' && player.element.paused) await play();
   }
 
   async function testSignal() {
@@ -315,6 +461,11 @@ export function createCapture({ onFrames, onEnded, log }) {
   return {
     share,
     microphone,
+    switchInput,
+    inputs,
+    files,
+    nextFile,
+    wake,
     testSignal,
     stop,
     dropVideo,
@@ -322,6 +473,16 @@ export function createCapture({ onFrames, onEnded, log }) {
     setAudible,
     get kind() {
       return kind;
+    },
+    get label() {
+      return label;
+    },
+    get inputId() {
+      return inputId;
+    },
+    // How many files are in line.
+    get queued() {
+      return queue.length;
     },
     get context() {
       return context;

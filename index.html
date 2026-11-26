@@ -44,6 +44,7 @@
       <p class="aside" id="wider">music in an app, not a tab? <button class="link" id="startscreen">share your whole screen</button> with its sound instead. pulsr then hears everything this computer plays, so spotify, apple music or any other player works</p>
       <p class="aside" id="nowider" hidden>chrome on linux can only pass on a tab’s sound, so the music has to play in a tab</p>
       <p class="private">sharing is how a web page gets to hear what your computer is playing, and chrome sends a picture along with the sound. pulsr only listens: the picture is never used, and nothing you share leaves your computer</p>
+      <p class="aside" id="also">got the music as files? <button class="link" id="alsofiles">play your own files</button> or drop them anywhere on this page. you can also <button class="link" id="alsomic">listen through a microphone</button> or another input</p>
     </div>
     <div class="step" id="step2" hidden>
       <p id="goplay"></p>
@@ -72,12 +73,21 @@
       <p class="private" id="private"></p>
       <p class="aside" id="other"><button class="link" id="switch"></button></p>
     </div>
-    <p id="fallback" hidden>this browser can’t share a tab, but you can <button class="link" id="usemic">use the microphone</button></p>
+    <div class="step" id="fallback" hidden>
+      <button class="cta glow" id="usefiles">play your own files</button>
+      <p class="aside">or drop music files or a whole folder anywhere on this page. they play right here and never leave your computer</p>
+      <p class="aside" id="monitor" hidden>firefox on linux can hear this computer directly: <button class="link" id="usemonitor">listen to this computer</button>, and when firefox asks which microphone, pick the one called “Monitor of …”</p>
+      <p class="aside"><button class="link" id="usemic">listen through a microphone</button> or another input instead</p>
+    </div>
     <p id="terminal">pulsr also <a class="link" href="https://github.com/1337raspberry/pulsr" target="_blank" rel="noopener">runs in a terminal</a></p>
   </div>
 </main>
 
 <p id="tips">try click/drag/scrolling. press P to see more options and change the look</p>
+
+<input type="file" id="picker" multiple accept="audio/*,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.wav" hidden>
+
+<menu id="inputs" hidden></menu>
 
 <footer id="status" hidden>
   <span id="what"></span>

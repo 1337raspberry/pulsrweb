@@ -2,10 +2,13 @@ import { Ridge } from './ridge/ridge.js';
 import { PARAMS } from './ridge/params.js';
 import { FrameRing } from './audio/frame-ring.js';
 import { createCapture } from './audio/capture.js';
+import { dropped, picked, title } from './audio/files.js';
+import { better, currentOf, isLoopback, plain } from './audio/inputs.js';
 import { createDemo } from './audio/demo-source.js';
 import { createIntro } from './ui/intro.js';
 import { createPoster } from './ui/poster.js';
 import { createStatus } from './ui/status.js';
+import { createInputs } from './ui/inputs.js';
 import { createDiagnostics } from './ui/diagnostics.js';
 import { createStage } from './scene/stage.js';
 import { HistoryRows } from './scene/history-rows.js';
@@ -51,6 +54,10 @@ const canShare =
 // the browser passes on a tab's sound only.
 const canShareScreen = canShare && navigator.userAgentData.platform !== 'Linux';
 
+// Firefox on Linux lists the monitor of each sound output among its microphones, so there
+// an input can be the computer's own sound. This only chooses which words the way in uses.
+const hearsItself = /Firefox\//.test(navigator.userAgent) && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+
 const ring = new FrameRing(WIDTH);
 const params = { ...PARAMS };
 const ridge = new Ridge(params, BANDS);
@@ -95,6 +102,11 @@ let heardAt = -Infinity;
 
 const stats = { frames: 0, paints: 0, peak: 0, quietSince: null };
 
+// The file that is playing, as the player last told it: { name, index, count }.
+let track = null;
+// Set once this visit has moved to the computer's own sound unasked, so it happens once.
+let moved = false;
+
 // What each source is called in the status line.
 const LISTENING = {
   tab: 'Listening to a shared tab',
@@ -102,8 +114,20 @@ const LISTENING = {
   mic: 'Listening through the microphone',
   test: 'Playing the test signal',
 };
-// What the start button says for each source.
-const START = { tab: 'share a tab', screen: 'share system audio', mic: 'use microphone' };
+function listening(route) {
+  if (route === 'files' && track) {
+    const place = track.count > 1 ? ` (${track.index + 1} of ${track.count})` : '';
+    return `Playing ${title(track)}${place}`;
+  }
+  if (route === 'mic' && capture.label) {
+    const name = plain(capture.label);
+    return isLoopback(name) ? `Listening to this computer through “${name}”` : `Listening through “${name}”`;
+  }
+  return LISTENING[route] ?? 'Listening';
+}
+// What the start button says for each source, and the stop button while it plays.
+const START = { tab: 'share a tab', screen: 'share system audio', mic: 'listen', files: 'play' };
+const STOP = { tab: 'stop sharing', screen: 'stop sharing', files: 'pause' };
 // What the ridge draws once stopped: silence, so it is plain that nothing is heard.
 const quiet = {
   read(t, out) {
@@ -119,7 +143,12 @@ const log = (text) => diagnostics.log(text);
 
 const capture = createCapture({
   log,
-  onEnded: () => end(),
+  onEnded: (notice) => end(notice),
+  onTrack(next) {
+    track = next;
+    if (document.body.dataset.view === 'live' && capture.kind === 'files') status.say(listening('files'));
+    showSourceKeys();
+  },
   onFrames({ positions, levels, peak }) {
     const at = performance.now() / 1000;
     for (let f = 0; f < positions.length; f++) ring.push(positions[f], levels, f * WIDTH, at);
@@ -128,8 +157,19 @@ const capture = createCapture({
     if (peak > SILENT_PEAK) heardAt = performance.now();
   },
 });
-const intro = createIntro({ canShare, canShareScreen, onStart: (route) => begin(route), onClose: () => toCover() });
+const intro = createIntro({
+  canShare,
+  canShareScreen,
+  hearsItself,
+  // Files are picked first; the pick is what starts them.
+  onStart: (route) => (route === 'files' ? openPicker() : begin(route)),
+  onClose: () => toCover(),
+});
 const status = createStatus({ onToggle: () => startOrStop() });
+const inputs = createInputs({ onPick: (input) => switchTo(input) });
+// The keys that belong to one kind of source, shown only while it plays.
+let nextKey = null;
+let inputKey = null;
 createPoster({ onPrompt: () => openIntro() });
 const diagnostics = createDiagnostics({
   capture,
@@ -153,6 +193,7 @@ function setView(view) {
     status.hide();
     setOptions(false);
   }
+  if (view !== 'live') inputs.close();
   if (view !== 'intro' && view !== 'asking') intro.hide();
 }
 
@@ -173,7 +214,8 @@ function toLive(route) {
   // A restart finds the camera where it was left.
   const resumed = document.body.dataset.view === 'stopped';
   setView('live');
-  status.show(LISTENING[route], route === 'mic' || route === 'test' ? 'stop' : 'stop sharing');
+  status.show(listening(route), STOP[route] ?? 'stop');
+  showSourceKeys();
   onboarded = true;
   if (route in START) startRoute = route;
   if (resumed) return;
@@ -187,14 +229,27 @@ function toStopped(notice = '') {
   setView('stopped');
   // The nudge is for the first time sound plays; from here on the status line shows.
   document.body.classList.add('handled');
-  status.show('Not listening', START[startRoute]);
+  // Files that are still in line carry on from where they stopped; with none left, the
+  // start button opens the file picker.
+  const paused = startRoute === 'files' && capture.queued > 0;
+  status.show(paused ? 'Paused' : 'Not listening', startRoute === 'files' && !paused ? 'open files' : START[startRoute]);
+  showSourceKeys();
   if (notice) status.hint(notice);
+}
+
+// The keys for the next file and for choosing an input show while they have something to do.
+function showSourceKeys() {
+  const live = document.body.dataset.view === 'live';
+  if (nextKey) nextKey.hidden = !(live && capture.kind === 'files' && capture.queued > 1);
+  if (inputKey) inputKey.hidden = !(live && capture.kind === 'microphone');
 }
 
 function startOrStop() {
   const view = document.body.dataset.view;
   if (view === 'live') end();
-  else if (view === 'stopped') begin(startRoute);
+  else if (view !== 'stopped') return;
+  else if (startRoute === 'files' && capture.queued === 0) openPicker();
+  else begin(startRoute);
 }
 
 function setOptions(open) {
@@ -212,7 +267,8 @@ function toggleOptions() {
   setOptions(!optionsOpen);
 }
 
-async function begin(route) {
+// `payload` is what the source plays where it plays something of the visitor's: their files.
+async function begin(route, payload) {
   if (starting) return;
   starting = true;
   // A start from the introduction keeps it up, busy, while the browser asks.
@@ -224,6 +280,7 @@ async function begin(route) {
   let result;
   try {
     if (route === 'mic') result = await capture.microphone();
+    else if (route === 'files') result = await capture.files(payload);
     else if (route === 'test') result = await capture.testSignal();
     else result = await capture.share(route);
   } catch (error) {
@@ -235,6 +292,8 @@ async function begin(route) {
   }
   if (result.ok) {
     toLive(route);
+    if (result.waiting) awaitClick();
+    if (route === 'mic') offerInputs();
     return;
   }
   // Past the way in, a start that fails is explained in the status line.
@@ -246,14 +305,109 @@ async function begin(route) {
   openIntro({ notice: intro.explain(route, result), at: route === 'tab' || route === 'screen' ? 3 : undefined });
 }
 
-function end() {
+// `notice` is a line about why the sound stopped, where it stopped by itself.
+function end(notice = '') {
   capture.stop();
   stats.quietSince = null;
   // A stop counts as silence at once, so a ridge that pauses keeps its last picture.
   heardAt = -Infinity;
-  if (onboarded) toStopped();
+  if (onboarded) toStopped(notice);
+  else if (notice) openIntro({ notice });
   else toCover();
 }
+
+// ---- files and inputs ----------------------------------------------------------------
+
+function openPicker() {
+  $('picker').click();
+}
+
+// Plays what was picked or dropped, or says that none of it was music.
+function playFiles(list) {
+  if (list.length > 0) {
+    begin('files', list);
+    return;
+  }
+  const notice = intro.explain('files', { why: 'nofiles' });
+  if (onStage()) status.hint(notice);
+  else openIntro({ notice });
+}
+
+// A browser holds sound back until the page has been clicked, which a file dropped from
+// another window is not. The next click or key lets it play.
+function awaitClick() {
+  status.hint('Click anywhere to start the music');
+  const wake = () => {
+    window.removeEventListener('pointerdown', wake);
+    window.removeEventListener('keydown', wake);
+    status.hint('');
+    capture.wake().catch((error) => log(`wake failed: ${error.name}: ${error.message}`));
+  };
+  window.addEventListener('pointerdown', wake);
+  window.addEventListener('keydown', wake);
+}
+
+// Once an input is in use the browser names the others. Where one of them is the
+// computer's own sound and a microphone was opened, it moves there, or says how to.
+async function offerInputs() {
+  const list = await capture.inputs();
+  if (capture.kind !== 'microphone' || isLoopback(capture.label)) return;
+  const target = moved ? null : better(list, capture.label);
+  if (target) {
+    moved = true;
+    status.hint(`Moving to “${target.label}”, which is this computer’s own sound. Allow it if the browser asks`);
+    await switchTo(target);
+    return;
+  }
+  const loopback = list.find((input) => input.loopback);
+  if (loopback) status.hint(`“${loopback.label}” is this computer’s own sound: press I to listen to it instead`);
+}
+
+async function switchTo(input) {
+  if (capture.kind !== 'microphone' || input.id === capture.inputId || input.label === plain(capture.label)) return;
+  const result = await capture.switchInput(input.id);
+  if (document.body.dataset.view !== 'live') return;
+  stats.quietSince = null;
+  status.hint(result.ok ? '' : `“${input.label}” was not allowed, so nothing changed`);
+  status.say(listening('mic'));
+}
+
+async function chooseInput() {
+  if (inputs.isOpen) {
+    inputs.close();
+    return;
+  }
+  if (document.body.dataset.view !== 'live' || capture.kind !== 'microphone') return;
+  const list = await capture.inputs();
+  if (list.length > 0) inputs.open(list, currentOf(list, capture.inputId, capture.label)?.id);
+}
+
+$('picker').addEventListener('change', (event) => {
+  const list = picked(event.target.files);
+  // Emptied, so that picking the same files again counts as a change.
+  event.target.value = '';
+  playFiles(list);
+});
+
+// Files held over the page: the page says so while they are, and plays them when let go.
+let dropTimer = null;
+const carriesFiles = (event) => [...(event.dataTransfer?.types || [])].includes('Files');
+window.addEventListener('dragover', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+  document.body.classList.add('dropping');
+  // No event says the files have left the window, so the notice goes when these stop.
+  clearTimeout(dropTimer);
+  dropTimer = setTimeout(() => document.body.classList.remove('dropping'), 200);
+});
+window.addEventListener('drop', async (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  clearTimeout(dropTimer);
+  document.body.classList.remove('dropping');
+  playFiles(await dropped(event.dataTransfer));
+});
 
 // Nothing draws after the graphics device is lost, so the page stops and says so.
 function lost(info) {
@@ -436,9 +590,10 @@ async function copyLink() {
   return notice.toLowerCase();
 }
 
+// Not every browser can fill the screen with a page (an iPhone's cannot).
 function fullScreen() {
   if (document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
 }
 
 // ---- frames --------------------------------------------------------------------------
@@ -583,6 +738,10 @@ function start() {
   pauseKey = status.addKey('q', 'pause on silence', togglePause);
   pauseKey.setAttribute('aria-pressed', String(values.pause));
   status.addKey('p', 'options', toggleOptions);
+  status.addKey('o', 'open files', openPicker);
+  nextKey = status.addKey('n', 'next', () => capture.nextFile());
+  inputKey = status.addKey('i', 'input', chooseInput);
+  showSourceKeys();
 
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
@@ -592,7 +751,7 @@ function start() {
     if (event.key === 'Escape' && document.body.dataset.view === 'intro') toCover();
     const key = event.key.toLowerCase();
     // A hotkey on a focused list replaces the list's own jump to a matching entry.
-    if (key.length === 1 && 'tgpfvdsq'.includes(key) && event.target instanceof HTMLSelectElement) {
+    if (key.length === 1 && 'tgpfvdsqoni'.includes(key) && event.target instanceof HTMLSelectElement) {
       event.preventDefault();
       event.target.blur();
     }
@@ -604,6 +763,9 @@ function start() {
     else if (key === 'q') togglePause();
     else if (key === 'd') diagnostics.toggle();
     else if (key === 's') startOrStop();
+    else if (key === 'o') openPicker();
+    else if (key === 'n') capture.nextFile();
+    else if (key === 'i') chooseInput();
   });
   window.addEventListener('pointermove', status.stir);
   window.addEventListener('pointermove', (event) => {

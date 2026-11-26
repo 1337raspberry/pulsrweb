@@ -32,6 +32,11 @@ export function createStatus({ onToggle }) {
     stir();
   }
 
+  // Changes what the line says is going on, leaving the rest of it as it is.
+  function say(text) {
+    $('what').textContent = text;
+  }
+
   function hide() {
     $('status').hidden = true;
     hint('');
@@ -54,5 +59,5 @@ export function createStatus({ onToggle }) {
 
   $('end').addEventListener('click', () => onToggle());
 
-  return { show, hide, hint, stir, addKey };
+  return { show, say, hide, hint, stir, addKey };
 }
