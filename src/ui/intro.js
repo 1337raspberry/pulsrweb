@@ -1,3 +1,5 @@
+import { WAYS } from '../ways.js';
+
 const $ = (id) => document.getElementById(id);
 
 // What goes with a share besides its sound, for each way of sharing. The page asks for the
@@ -33,20 +35,20 @@ export const GUIDES = {
   },
 };
 
-// What the opening words say in a browser that cannot share a tab.
-const LEDE_ELSEWHERE =
-  'interactive 3d pulsar burst visualiser. sharing a tab’s sound is chrome only soz, but your own music files play in any browser';
+// Where a tab could be shared, said where it cannot be here.
+const ELSEWHERE = {
+  browser: 'or open this page in a chromium based browser (chrome, edge, brave…) if you have one, and share a tab’s audio there.',
+  computer: 'on a computer, a chromium based browser (chrome, edge, brave…) can also listen to a tab or to everything it plays',
+};
 
-// The introduction: three steps, one on screen at a time. The first says what pulsr is
-// and offers a tab or, where the browser can pass on the whole computer's sound
-// (`canShareScreen`), the screen; either leads to "go and play something", "ready" leads
-// to a picture of the browser's picker, and "share" opens the real one. The later steps
-// show only their own words. Beside the first step, and in place of all three where the
-// browser cannot share a tab, are the ways in that every browser has: the visitor's own
-// files, and an input such as the microphone. `hearsItself` says the browser lists the
-// computer's own sound among its inputs. `onStart(route)` gets 'tab', 'screen', 'files'
+// The introduction: three steps, one on screen at a time. The first says what pulsr is,
+// names the browser and system the page is on (`where`, from `detect`) and offers the ways
+// of getting music in that work there (`offer`, from `offerFor`), each with a word on what
+// it does. A tab or the screen leads to "go and play something", "ready" leads to a picture
+// of the browser's picker, and "share" opens the real one; the later steps show only their
+// own words. Files and inputs start at once. `onStart(route)` gets 'tab', 'screen', 'files'
 // or 'mic'; `onClose()` is called when the visitor backs out.
-export function createIntro({ canShare, canShareScreen, hearsItself = false, onStart, onClose }) {
+export function createIntro({ where, offer, onStart, onClose }) {
   // The way of sharing the picture describes and the share button starts.
   let chosen = 'tab';
   let step = 1;
@@ -82,16 +84,13 @@ export function createIntro({ canShare, canShareScreen, hearsItself = false, onS
 
   function setStep(n) {
     step = n;
-    for (const i of [1, 2, 3]) $(`step${i}`).hidden = !canShare || i !== n;
-    for (const id of ['about', 'terminal']) $(id).hidden = canShare && n !== 1;
-    const button = $(`step${n}`).querySelector('button');
-    if (canShare && !$('intro').hidden) button.focus({ preventScroll: true });
+    for (const i of [1, 2, 3]) $(`step${i}`).hidden = i !== n;
+    for (const id of ['about', 'terminal']) $(id).hidden = n !== 1;
+    if (!$('intro').hidden) $(`step${n}`).querySelector('button')?.focus({ preventScroll: true });
   }
 
   function setBusy(busy) {
-    for (const id of ['start', 'startscreen', 'ready', 'sharenow', 'switch', 'usefiles', 'usemic', 'usemonitor', 'alsofiles', 'alsomic']) {
-      $(id).disabled = busy;
-    }
+    for (const button of $('card').querySelectorAll('button')) button.disabled = busy;
   }
 
   // Opens at `at`, or where it was left. `notice` is a line about what just went wrong.
@@ -106,7 +105,7 @@ export function createIntro({ canShare, canShareScreen, hearsItself = false, onS
   // Shows only the opening words and `notice`, with no way to start: for when nothing can be drawn.
   function fail(notice) {
     open({ notice });
-    for (const id of ['step1', 'step2', 'step3', 'fallback', 'terminal']) $(id).hidden = true;
+    for (const id of ['step1', 'step2', 'step3', 'terminal']) $(id).hidden = true;
     $('about').hidden = false;
   }
 
@@ -138,29 +137,76 @@ export function createIntro({ canShare, canShareScreen, hearsItself = false, onS
     return result.error ? `That did not work: ${result.error.message}` : 'That did not work.';
   }
 
-  for (const [id, route] of [['start', 'tab'], ['startscreen', 'screen']]) {
-    $(id).addEventListener('click', () => {
-      showGuide(route);
-      setStep(2);
-    });
+  // The line that names the setup, the names in bold.
+  function greet() {
+    const names = [where.browser, where.system].filter(Boolean);
+    const line = $('you');
+    line.replaceChildren();
+    if (names.length > 0) {
+      line.append('looks like you’re on ');
+      names.forEach((name, i) => {
+        if (i > 0) line.append(' on ');
+        const strong = document.createElement('b');
+        strong.textContent = name;
+        line.append(strong);
+      });
+      line.append('. ');
+    }
+    line.append('to visualize your music you can:');
   }
+
+  // One button for each way on offer: its name, and under it what it does.
+  function listWays() {
+    $('ways').replaceChildren(
+      ...offer.ways.map((name, i) => {
+        const way = WAYS[name];
+        const button = document.createElement('button');
+        button.className = i === 0 ? 'way main' : 'way';
+        button.id = `way-${name}`;
+        const label = document.createElement('b');
+        label.textContent = way.label;
+        const blurb = document.createElement('span');
+        blurb.textContent = (where.mobile && way.blurbMobile) || way.blurb;
+        button.append(label, blurb);
+        button.addEventListener('click', () => {
+          // Sharing is walked through first; files and inputs start at once.
+          if (way.route === 'tab' || way.route === 'screen') {
+            showGuide(way.route);
+            setStep(2);
+          } else {
+            onStart(way.route);
+          }
+        });
+        return button;
+      }),
+    );
+  }
+
   // From the picture of one picker to the picture of the other.
   $('switch').addEventListener('click', () => showGuide(chosen === 'tab' ? 'screen' : 'tab'));
   $('ready').addEventListener('click', () => setStep(3));
   $('sharenow').addEventListener('click', () => onStart(chosen));
-  for (const id of ['usefiles', 'alsofiles']) $(id).addEventListener('click', () => onStart('files'));
-  for (const id of ['usemic', 'usemonitor', 'alsomic']) $(id).addEventListener('click', () => onStart('mic'));
+  $('alsomic').addEventListener('click', () => onStart('mic'));
   $('back').addEventListener('click', () => onClose());
+  $('copylink').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      $('copylink').textContent = 'copied, now paste it there';
+    } catch {
+      $('copylink').textContent = 'copy it from the address bar';
+    }
+  });
 
   $('m-site').textContent = location.host;
   showGuide('tab');
-  $('wider').hidden = !canShareScreen;
-  $('nowider').hidden = canShareScreen;
-  $('other').hidden = !canShareScreen;
-  // Without tab sharing, files and inputs are the ways in.
-  $('fallback').hidden = canShare;
-  $('monitor').hidden = !hearsItself;
-  if (!canShare) $('lede').textContent = LEDE_ELSEWHERE;
+  greet();
+  listWays();
+  $('other').hidden = !offer.ways.includes('screen');
+  $('elsewhere').hidden = !offer.elsewhere;
+  $('elsewhere-text').textContent = ELSEWHERE[offer.elsewhere] ?? '';
+  $('copylink').hidden = offer.elsewhere !== 'browser' || !navigator.clipboard;
+  // An input is its own way in where the offer has one; elsewhere it is a line underneath.
+  $('quiet').hidden = offer.ways.includes('mic') || offer.ways.includes('monitor');
   setStep(1);
 
   return { open, hide, fail, setBusy, showGuide, explain };

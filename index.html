@@ -36,15 +36,14 @@
   <div id="card">
     <div id="about">
       <h2>pulsr</h2>
-      <p id="lede">interactive 3d pulsar burst visualiser. play music in another tab and share it here. chrome only soz</p>
+      <p id="lede">interactive 3d pulsar burst visualiser</p>
     </div>
     <p id="notice" role="status" hidden></p>
     <div class="step" id="step1">
-      <button class="cta glow" id="start">share a tab</button>
-      <p class="aside" id="wider">music in an app, not a tab? <button class="link" id="startscreen">share your whole screen</button> with its sound instead. pulsr then hears everything this computer plays, so spotify, apple music or any other player works</p>
-      <p class="aside" id="nowider" hidden>chrome on linux can only pass on a tab’s sound, so the music has to play in a tab</p>
-      <p class="private">sharing is how a web page gets to hear what your computer is playing, and chrome sends a picture along with the sound. pulsr only listens: the picture is never used, and nothing you share leaves your computer</p>
-      <p class="aside" id="also">got the music as files? <button class="link" id="alsofiles">play your own files</button> or drop them anywhere on this page. you can also <button class="link" id="alsomic">listen through a microphone</button> or another input</p>
+      <p id="you"></p>
+      <div id="ways"></div>
+      <p class="aside" id="elsewhere" hidden><span id="elsewhere-text"></span> <button class="link" id="copylink" hidden>copy the link</button></p>
+      <p class="aside" id="quiet" hidden>or <button class="link" id="alsomic">listen through a microphone</button> or another input</p>
     </div>
     <div class="step" id="step2" hidden>
       <p id="goplay"></p>
@@ -72,12 +71,6 @@
       <button class="cta" id="sharenow">share</button>
       <p class="private" id="private"></p>
       <p class="aside" id="other"><button class="link" id="switch"></button></p>
-    </div>
-    <div class="step" id="fallback" hidden>
-      <button class="cta glow" id="usefiles">play your own files</button>
-      <p class="aside">or drop music files or a whole folder anywhere on this page. they play right here and never leave your computer</p>
-      <p class="aside" id="monitor" hidden>firefox on linux can hear this computer directly: <button class="link" id="usemonitor">listen to this computer</button>, and when firefox asks which microphone, pick the one called “Monitor of …”</p>
-      <p class="aside"><button class="link" id="usemic">listen through a microphone</button> or another input instead</p>
     </div>
     <p id="terminal">pulsr also <a class="link" href="https://github.com/1337raspberry/pulsr" target="_blank" rel="noopener">runs in a terminal</a></p>
   </div>

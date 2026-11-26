@@ -20,8 +20,7 @@ test('every way of sharing says the picture is unused and nothing leaves the com
     expect(guide.steps.length, route).toBe(3);
   }
   expect(GUIDES.screen.play).toMatch(/any app or player/);
-  // The first step says it for both, and offers the screen beside the tab.
-  const first = page.slice(page.indexOf('id="step1"'), page.indexOf('id="step2"'));
-  expect(first).toMatch(/picture is never used, and nothing you share leaves your computer/);
-  expect(first).toMatch(/id="start"[^]*id="startscreen"/);
+  // The last step, where the share is made, has the place the words go.
+  const last = page.slice(page.indexOf('id="step3"'));
+  expect(last).toMatch(/id="sharenow"[^]*id="private"/);
 });

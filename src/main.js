@@ -6,6 +6,7 @@ import { dropped, picked, title } from './audio/files.js';
 import { better, currentOf, isLoopback, plain } from './audio/inputs.js';
 import { createDemo } from './audio/demo-source.js';
 import { createIntro } from './ui/intro.js';
+import { detect, named, offerFor } from './ways.js';
 import { createPoster } from './ui/poster.js';
 import { createStatus } from './ui/status.js';
 import { createInputs } from './ui/inputs.js';
@@ -42,21 +43,12 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('ridge');
 const query = new URLSearchParams(location.search);
 
-// Sharing a tab with its sound exists only in Chromium browsers on a computer.
-const brands = navigator.userAgentData ? navigator.userAgentData.brands : [];
-const canShare =
-  query.get('as') !== 'other' &&
-  brands.some((entry) => entry.brand === 'Chromium') &&
-  !navigator.userAgentData.mobile &&
-  !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
-
-// The whole computer's sound comes with a shared screen on every system but Linux, where
-// the browser passes on a tab's sound only.
-const canShareScreen = canShare && navigator.userAgentData.platform !== 'Linux';
-
-// Firefox on Linux lists the monitor of each sound output among its microphones, so there
-// an input can be the computer's own sound. This only chooses which words the way in uses.
-const hearsItself = /Firefox\//.test(navigator.userAgent) && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+// Where the page is and what works there. `?as=firefox-linux` and the like show the page
+// as another setup sees it.
+const seenAs = named(query.get('as'));
+const where = seenAs ?? detect(navigator);
+const offer = offerFor(where, { displayMedia: !!seenAs || !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) });
+const canShare = offer.ways.includes('tab');
 
 const ring = new FrameRing(WIDTH);
 const params = { ...PARAMS };
@@ -158,9 +150,8 @@ const capture = createCapture({
   },
 });
 const intro = createIntro({
-  canShare,
-  canShareScreen,
-  hearsItself,
+  where,
+  offer,
   // Files are picked first; the pick is what starts them.
   onStart: (route) => (route === 'files' ? openPicker() : begin(route)),
   onClose: () => toCover(),
@@ -685,7 +676,7 @@ const supported = navigator.mediaDevices ? navigator.mediaDevices.getSupportedCo
 log(navigator.userAgent);
 log(
   `secure context: ${window.isSecureContext}, getDisplayMedia: ${!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)}, ` +
-    `CaptureController: ${'CaptureController' in window}, tab sharing offered: ${canShare}, screen sharing offered: ${canShareScreen}`,
+    `CaptureController: ${'CaptureController' in window}, seen as: ${where.browser || '?'} on ${where.system || '?'}, offered: ${offer.ways.join(', ')}`,
 );
 log(
   `constraints known: ${['displaySurface', 'suppressLocalAudioPlayback', 'restrictOwnAudio']

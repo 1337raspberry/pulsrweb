@@ -54,7 +54,7 @@ body[data-view="live"]:not(.handled) #tips { opacity: 0.55; transition: opacity 
   background: color-mix(in srgb, var(--background) 88%, transparent);
   font: 300 17px/1.5 var(--sans); color: var(--c1); animation: appear 0.35s both;
 }
-#card { width: min(31rem, 100%); text-align: center; }
+#card { width: min(45rem, 100%); text-align: center; }
 #card h2 { margin: 0 0 0.35em; font-size: clamp(3.5rem, 11vw, 6rem); font-weight: 300; line-height: 0.9; }
 #lede { max-width: 26em; margin: 0 auto; text-wrap: balance; }
 #notice { margin: 1.6em auto 0; max-width: 28em; padding: 0.6em 0.9em; border: 1px solid currentColor; font-size: 0.9em; }
@@ -66,13 +66,35 @@ body[data-view="live"]:not(.handled) #tips { opacity: 0.55; transition: opacity 
 .step > .aside { margin-top: 1.6em; max-width: 27em; font-size: 0.9em; }
 .step > .private { margin-top: 1.4em; max-width: 30em; font-size: 0.82em; opacity: 0.7; }
 
+/* The first step: which setup the page is on, then the ways in that work there, side by
+   side. Each is a button with its name and, under it, a word on what it does; the first
+   is the one to lead with and is filled in. */
+#you { max-width: 30em; }
+#you b { font-weight: 500; }
+#ways { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.9rem; margin-top: 1.5em; }
+.way {
+  position: relative; overflow: hidden; flex: 0 1 13.8rem; display: flex; flex-direction: column; gap: 0.55em;
+  padding: 1.05em 1em 1.15em; border: 1px solid color-mix(in srgb, var(--c1) 45%, transparent);
+  background: color-mix(in srgb, var(--background) 70%, transparent); transition: transform 0.15s, background 0.15s, color 0.15s;
+}
+.way b { font-size: 1.12em; font-weight: 400; line-height: 1.25; text-wrap: balance; }
+.way span { font-size: 0.78em; line-height: 1.4; opacity: 0.75; text-wrap: balance; }
+.way.main { background: var(--c1); color: var(--background); border-color: var(--c1); animation: glow 2.6s ease-in-out infinite; }
+.way.main span { opacity: 0.8; }
+.way:hover:not(:disabled), .way:focus-visible {
+  background: var(--c1); color: var(--background); transform: scale(1.03); outline: 1px solid var(--c1); outline-offset: 4px;
+}
+.way:active:not(:disabled) { transform: scale(0.98); }
+.way:disabled { opacity: 0.45; cursor: default; }
+@media (max-width: 520px) { .way { flex-basis: 100%; } }
+
 /* The call to action: a solid block with a sheen passing over it, and on the first one a
    slow pulse of light around it. */
 .cta {
   position: relative; overflow: hidden; padding: 0.72em 2.1em 0.78em; font-size: 1.3em; font-weight: 400;
   background: var(--c1); color: var(--background); transition: transform 0.15s;
 }
-.cta::after {
+.cta::after, .way.main::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(105deg, transparent 38%, color-mix(in srgb, var(--background) 45%, transparent) 50%, transparent 62%);
   transform: translateX(-100%); animation: sheen 2.6s ease-in-out infinite;
@@ -233,7 +255,7 @@ body:has(#panel:not([hidden])) #controls { max-height: calc(50vh - 12px); }
 #log { margin-top: 8px; max-height: 15.5em; overflow-y: auto; opacity: 0.8; font-size: 11px; }
 
 @media (prefers-reduced-motion: reduce) {
-  #status, #poster, .cta { transition: none; }
-  #intro, #title span, .step, .cta.glow { animation: none; }
-  .cta::after { display: none; }
+  #status, #poster, .cta, .way { transition: none; }
+  #intro, #title span, .step, .cta.glow, .way.main { animation: none; }
+  .cta::after, .way.main::after { display: none; }
 }
