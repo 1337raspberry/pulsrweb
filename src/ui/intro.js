@@ -1,8 +1,16 @@
 const $ = (id) => document.getElementById(id);
 
-// What the browser's picker shows for each way of sharing, and what to do in it.
-const GUIDES = {
+// What goes with a share besides its sound, for each way of sharing. The page asks for the
+// picture only because the browser gives no sound without one; it is never read.
+const PRIVATE = 'pulsr only listens: the picture is never used, and nothing you share leaves your computer';
+
+// For each way of sharing: where the music plays, what the browser's picker shows and what
+// to do in it, and the words that lead to the other way.
+export const GUIDES = {
   tab: {
+    play: 'go play some music in another tab, then come back and click ready',
+    private: `chrome sends the tab’s picture along with its sound. ${PRIVATE}`,
+    other: 'music in an app, not a tab? share your whole screen instead',
     panes: ['Chrome tab', 'Window'],
     chosen: 0,
     row: 'The tab your music is in',
@@ -12,6 +20,9 @@ const GUIDES = {
     note: '',
   },
   screen: {
+    play: 'go play some music in any app or player, then come back and click ready',
+    private: `chrome sends your screen’s picture along with the computer’s sound. ${PRIVATE}`,
+    other: 'music in a tab? share just that tab instead',
     panes: ['Chrome tab', 'Window', 'Entire screen'],
     chosen: 2,
     row: 'Your screen',
@@ -23,11 +34,12 @@ const GUIDES = {
 };
 
 // The introduction: three steps, one on screen at a time. The first says what pulsr is
-// and its button leads to "go and play something", "ready" leads to a picture of the
-// browser's picker, and "share" opens the real one. The later steps show only their own
-// words. `onStart(route)` gets 'tab', 'screen' or 'mic'; `onClose()` is called when the
-// visitor backs out.
-export function createIntro({ canShare, onStart, onClose }) {
+// and offers a tab or, where the browser can pass on the whole computer's sound
+// (`canShareScreen`), the screen; either leads to "go and play something", "ready" leads
+// to a picture of the browser's picker, and "share" opens the real one. The later steps
+// show only their own words. `onStart(route)` gets 'tab', 'screen' or 'mic'; `onClose()`
+// is called when the visitor backs out.
+export function createIntro({ canShare, canShareScreen, onStart, onClose }) {
   // The way of sharing the picture describes and the share button starts.
   let chosen = 'tab';
   let step = 1;
@@ -35,6 +47,9 @@ export function createIntro({ canShare, onStart, onClose }) {
   function showGuide(route) {
     const guide = GUIDES[route];
     chosen = route;
+    $('goplay').textContent = guide.play;
+    $('private').textContent = guide.private;
+    $('switch').textContent = guide.other;
     $('lead').textContent = guide.lead;
     // The mock of the picker: its panes, the row to pick and the audio switch.
     $('m-panes').replaceChildren(
@@ -67,7 +82,7 @@ export function createIntro({ canShare, onStart, onClose }) {
   }
 
   function setBusy(busy) {
-    for (const id of ['start', 'ready', 'sharenow', 'usemic']) $(id).disabled = busy;
+    for (const id of ['start', 'startscreen', 'ready', 'sharenow', 'switch', 'usemic']) $(id).disabled = busy;
   }
 
   // Opens at `at`, or where it was left. `notice` is a line about what just went wrong.
@@ -113,10 +128,14 @@ export function createIntro({ canShare, onStart, onClose }) {
     return result.error ? `That did not work: ${result.error.message}` : 'That did not work.';
   }
 
-  $('start').addEventListener('click', () => {
-    showGuide('tab');
-    setStep(2);
-  });
+  for (const [id, route] of [['start', 'tab'], ['startscreen', 'screen']]) {
+    $(id).addEventListener('click', () => {
+      showGuide(route);
+      setStep(2);
+    });
+  }
+  // From the picture of one picker to the picture of the other.
+  $('switch').addEventListener('click', () => showGuide(chosen === 'tab' ? 'screen' : 'tab'));
   $('ready').addEventListener('click', () => setStep(3));
   $('sharenow').addEventListener('click', () => onStart(chosen));
   $('usemic').addEventListener('click', () => onStart('mic'));
@@ -124,6 +143,9 @@ export function createIntro({ canShare, onStart, onClose }) {
 
   $('m-site').textContent = location.host;
   showGuide('tab');
+  $('wider').hidden = !canShareScreen;
+  $('nowider').hidden = canShareScreen;
+  $('other').hidden = !canShareScreen;
   // Without tab sharing, the microphone is the one way in.
   $('fallback').hidden = canShare;
   setStep(1);

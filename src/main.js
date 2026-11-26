@@ -12,8 +12,8 @@ import { HistoryRows } from './scene/history-rows.js';
 import { posterWidth } from './scene/view-math.js';
 import { createRidgeMesh, WIDTH as ROW_WIDTH } from './scene/ridge-mesh.js';
 import { createPanel } from './ui/panel.js';
-import { OPENING_THEME, SETTINGS, decode, defaults, encode } from './settings.js';
-import { THEMES, findTheme, findGradient } from './themes.js';
+import { FLOWS, LAYOUTS, SETTINGS, decode, defaults, encode } from './settings.js';
+import { PALETTES, findPalette, findGradient } from './palettes.js';
 
 const BANDS = 64;
 const WIDTH = BANDS * 2;
@@ -25,6 +25,10 @@ const LINK_NOTICE_MS = 2000;
 const DRIFT_AFTER_MS = 600;
 // How long the camera takes to return to the cover, in seconds.
 const TO_COVER_SECONDS = 1.4;
+// With `pause` on, the ridge holds still once nothing louder than this peak (about -60 dB)
+// has arrived for this long, in ms.
+const SILENT_PEAK = 0.001;
+const PAUSE_AFTER_MS = 1000;
 // World height the cover allows for peaks above its back row, for the poster's shape.
 const PEAK_ROOM = 1.5;
 
@@ -39,6 +43,10 @@ const canShare =
   brands.some((entry) => entry.brand === 'Chromium') &&
   !navigator.userAgentData.mobile &&
   !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+
+// The whole computer's sound comes with a shared screen on every system but Linux, where
+// the browser passes on a tab's sound only.
+const canShareScreen = canShare && navigator.userAgentData.platform !== 'Linux';
 
 const ring = new FrameRing(WIDTH);
 const params = { ...PARAMS };
@@ -57,8 +65,17 @@ const link = decode(location.hash.slice(1));
 // A view from the link, waiting for the music to start: the cover has its own.
 let linkView = link.view;
 let optionsOpen = false;
-// The introduction opens on its last step once a share has worked.
-let hasShared = false;
+// The status line's button for `pause`, which shows whether it is on.
+let pauseKey = null;
+// The cover and the introduction are the way in. Once something has played, stopping
+// leaves the ridge up with its controls instead of going back to them.
+let onboarded = false;
+// What the start button starts: the last kind of source that worked.
+let startRoute = canShare ? 'tab' : 'mic';
+// Set while a start is waiting on the browser, so a second one cannot begin.
+let starting = false;
+// When sound was last heard, on the frame clock (ms).
+let heardAt = -Infinity;
 
 const stats = { frames: 0, paints: 0, peak: 0, quietSince: null };
 
@@ -68,6 +85,15 @@ const LISTENING = {
   screen: 'Listening to this computer’s sound',
   mic: 'Listening through the microphone',
   test: 'Playing the test signal',
+};
+// What the start button says for each source.
+const START = { tab: 'share a tab', screen: 'share system audio', mic: 'use microphone' };
+// What the ridge draws once stopped: silence, so it is plain that nothing is heard.
+const quiet = {
+  read(t, out) {
+    out.fill(0);
+    return true;
+  },
 };
 
 // ---- modules -------------------------------------------------------------------------
@@ -83,10 +109,11 @@ const capture = createCapture({
     for (let f = 0; f < positions.length; f++) ring.push(positions[f], levels, f * WIDTH, at);
     stats.frames += positions.length;
     if (peak > stats.peak) stats.peak = peak;
+    if (peak > SILENT_PEAK) heardAt = performance.now();
   },
 });
-const intro = createIntro({ canShare, onStart: (route) => begin(route), onClose: () => toCover() });
-const status = createStatus({ onStop: () => end() });
+const intro = createIntro({ canShare, canShareScreen, onStart: (route) => begin(route), onClose: () => toCover() });
+const status = createStatus({ onToggle: () => startOrStop() });
 createPoster({ onPrompt: () => openIntro() });
 const diagnostics = createDiagnostics({
   capture,
@@ -100,16 +127,21 @@ const diagnostics = createDiagnostics({
 // cover: the ridge between its two lines of type, moving to a made-up signal.
 // intro: the introduction over it. asking: the same, while the browser's picker is open.
 // live: the ridge alone, moving to what is shared, with a line of tips under it.
+// stopped: the ridge alone and silent, with the status line and its start button.
 function setView(view) {
   document.body.dataset.view = view;
-  // Dragging is for the live ridge only.
-  if (stage) stage.controls.enabled = view === 'live';
-  if (view !== 'live') {
+  const staged = view === 'live' || view === 'stopped';
+  // Dragging is for the ridge on its own.
+  if (stage) stage.controls.enabled = staged;
+  if (!staged) {
     status.hide();
     setOptions(false);
   }
-  if (view === 'cover' || view === 'live') intro.hide();
+  if (view !== 'intro' && view !== 'asking') intro.hide();
 }
+
+// Whether the ridge is up on its own, playing or stopped.
+const onStage = () => document.body.dataset.view === 'live' || document.body.dataset.view === 'stopped';
 
 function toCover() {
   setView('cover');
@@ -118,36 +150,55 @@ function toCover() {
 
 function openIntro(options = {}) {
   setView('intro');
-  intro.open({ at: hasShared ? 3 : undefined, ...options });
+  intro.open(options);
 }
 
 function toLive(route) {
+  // A restart finds the camera where it was left.
+  const resumed = document.body.dataset.view === 'stopped';
   setView('live');
   status.show(LISTENING[route], route === 'mic' || route === 'test' ? 'stop' : 'stop sharing');
-  hasShared = hasShared || route === 'tab';
-  // The tips stay up until the ridge has been handled.
-  document.body.classList.remove('handled');
+  onboarded = true;
+  if (route in START) startRoute = route;
+  if (resumed) return;
   if (stage) stage.goLive({ view: linkView, drift: values.drift, delayMs: DRIFT_AFTER_MS });
   linkView = null;
+}
+
+// The ridge stays up, silent, with the status line offering a start. `notice` is a line
+// about a start that just went wrong.
+function toStopped(notice = '') {
+  setView('stopped');
+  // The nudge is for the first time sound plays; from here on the status line shows.
+  document.body.classList.add('handled');
+  status.show('Not listening', START[startRoute]);
+  if (notice) status.hint(notice);
+}
+
+function startOrStop() {
+  const view = document.body.dataset.view;
+  if (view === 'live') end();
+  else if (view === 'stopped') begin(startRoute);
 }
 
 function setOptions(open) {
   optionsOpen = open;
   if (open) panel?.show();
   else panel?.hide();
-  status.setOpen(open);
   document.body.classList.toggle('options', open);
 }
 
-// The options open over the live ridge, and over the cover for tuning its look.
+// The options open over the ridge on its own, and over the cover for tuning its look.
 function toggleOptions() {
   const view = document.body.dataset.view;
-  if (view !== 'live' && view !== 'cover') return;
+  if (!onStage() && view !== 'cover') return;
   if (view === 'live') document.body.classList.add('handled');
   setOptions(!optionsOpen);
 }
 
 async function begin(route) {
+  if (starting) return;
+  starting = true;
   // A start from the introduction keeps it up, busy, while the browser asks.
   const asked = document.body.dataset.view === 'intro';
   if (asked) setView('asking');
@@ -163,9 +214,16 @@ async function begin(route) {
     log(`start failed: ${error.name}: ${error.message}`);
     capture.stop();
     result = { ok: false, why: 'error', error };
+  } finally {
+    starting = false;
   }
   if (result.ok) {
     toLive(route);
+    return;
+  }
+  // Past the way in, a start that fails is explained in the status line.
+  if (onboarded) {
+    toStopped(intro.explain(route, result));
     return;
   }
   if (route === 'tab' || route === 'screen') intro.showGuide(route);
@@ -175,7 +233,10 @@ async function begin(route) {
 function end() {
   capture.stop();
   stats.quietSince = null;
-  toCover();
+  // A stop counts as silence at once, so a ridge that pauses keeps its last picture.
+  heardAt = -Infinity;
+  if (onboarded) toStopped();
+  else toCover();
 }
 
 // Nothing draws after the graphics device is lost, so the page stops and says so.
@@ -186,38 +247,44 @@ function lost(info) {
   intro.fail('The graphics stopped. Reload the page to start again.');
 }
 
+// What a change of preset leaves alone, beside the preset itself.
+const COLOUR = new Set(['preset', 'palette', 'colours']);
+
 // The one way a setting changes: from the panel, a key or the link.
 function set(name, value) {
-  if (name === 'theme') {
-    const theme = findTheme(value);
-    // Moving to or from the opening theme swaps every other setting for that side's defaults.
-    const crossed = (values.theme === OPENING_THEME) !== (theme.name === OPENING_THEME);
-    values.theme = theme.name;
-    values.gradient = theme.gradients[0].name;
-    if (crossed) {
-      const base = defaults(theme.name);
-      // Only what differs is set, so a setting that holds its value is not started afresh.
-      for (const s of SETTINGS) if (s.kind !== 'choice' && values[s.name] !== base[s.name]) set(s.name, base[s.name]);
+  if (name === 'preset') {
+    const changed = values.preset !== value;
+    values.preset = value;
+    if (changed) {
+      // A preset brings its own defaults for everything but colour. Only what differs is
+      // set, so a setting that holds its value is not started afresh.
+      const base = defaults(value, values.palette);
+      for (const s of SETTINGS) if (!COLOUR.has(s.name) && !s.sticky && values[s.name] !== base[s.name]) set(s.name, base[s.name]);
     }
-  } else if (name === 'gradient') {
-    values.gradient = findGradient(findTheme(values.theme), value).name;
+  } else if (name === 'palette') {
+    const palette = findPalette(value);
+    values.palette = palette.name;
+    values.colours = palette.gradients[0].name;
+  } else if (name === 'colours') {
+    values.colours = findGradient(findPalette(values.palette), value).name;
   } else {
     values[name] = value;
   }
   if (name === 'speed') ridge.setParams({ rowMs: 1000 / values.speed });
   else if (name in PARAMS) ridge.setParams({ [name]: values[name] });
-  if (name === 'theme' || name === 'gradient') applyTheme();
+  if (name === 'palette' || name === 'colours') applyPalette();
   if (name in PARAMS || name === 'speed' || name.startsWith('demo')) refill = true;
-  if (name === 'rows' || name === 'spacing' || name === 'tilt' || name === 'theme') applyLayout();
+  if (name === 'rows' || name === 'spacing' || name === 'tilt' || name === 'preset') applyLayout();
   if (name === 'fov' && stage) stage.setFov(values.fov);
-  if (name === 'drift' && stage && document.body.dataset.view === 'live') stage.setDrift(values.drift);
+  if (name === 'drift' && stage && onStage()) stage.setDrift(values.drift);
+  if (name === 'pause') pauseKey?.setAttribute('aria-pressed', String(values.pause));
   applyValues();
   if (panel) panel.refresh();
 }
 
-// Under the opening theme the ridge is laid out as a sleeve: fitted to the poster and seen
-// flat on the cover. Under any other it is laid out as pulsr's own.
-const isSleeve = () => values.theme === OPENING_THEME;
+// A sleeve layout is fitted to the poster and seen flat on the cover; the others are open.
+const layout = () => LAYOUTS[values.preset] ?? LAYOUTS.division;
+const isSleeve = () => layout().sleeve;
 
 // On the sleeve the line setting is the width at a poster of this many pixels; it is scaled
 // with the poster, within limits, so the ridge keeps its weight from a phone to a large screen.
@@ -226,7 +293,7 @@ const LINE_AT_POSTER = 560;
 function applyValues() {
   if (!mesh) return;
   const fitted = Math.min(1.6, Math.max(0.7, posterWidth(window.innerWidth, window.innerHeight) / LINE_AT_POSTER));
-  mesh.setValues({ ...values, lineWidth: values.lineWidth * (isSleeve() ? fitted : 1) });
+  mesh.setValues({ ...values, flow: FLOWS.indexOf(values.flow), lineWidth: values.lineWidth * (isSleeve() ? fitted : 1) });
 }
 
 // The camera's front view follows the layout, and on the sleeve the poster's shape follows
@@ -238,7 +305,7 @@ function applyLayout() {
   const ratio = sleeve ? (depth * Math.sin(tilt) + PEAK_ROOM * Math.cos(tilt)) / ROW_WIDTH : 1;
   document.documentElement.style.setProperty('--poster-ratio', ratio.toFixed(4));
   document.body.classList.toggle('sleeve', sleeve);
-  if (stage) stage.setLayout({ depth, tilt: values.tilt, sleeve });
+  if (stage) stage.setLayout({ depth, tilt: values.tilt, sleeve, framing: layout().framing, target: layout().target });
 }
 
 // Runs the made-up signal for as long as the rows hold, ending now, so the whole ridge
@@ -249,30 +316,30 @@ function fillFromDemo() {
   refill = false;
 }
 
-function applyTheme() {
-  const t = findTheme(values.theme);
-  const gradient = findGradient(t, values.gradient);
+function applyPalette() {
+  const palette = findPalette(values.palette);
+  const gradient = findGradient(palette, values.colours);
   const style = document.documentElement.style;
-  style.setProperty('--background', t.background);
-  style.setProperty('--text', t.text);
+  style.setProperty('--background', gradient.background);
+  style.setProperty('--text', gradient.text);
   gradient.stops.forEach((colour, i) => style.setProperty(`--c${i + 1}`, colour));
-  if (stage) stage.setBackground(t.background);
-  if (mesh) mesh.setTheme(t, gradient);
+  if (stage) stage.setBackground(gradient.background);
+  if (mesh) mesh.setColours(gradient);
 }
 
-function nextTheme() {
-  const i = THEMES.indexOf(findTheme(values.theme));
-  set('theme', THEMES[(i + 1) % THEMES.length].name);
+function nextPalette() {
+  const i = PALETTES.indexOf(findPalette(values.palette));
+  set('palette', PALETTES[(i + 1) % PALETTES.length].name);
 }
 
-function nextGradient() {
-  const gradients = findTheme(values.theme).gradients;
-  const i = gradients.indexOf(findGradient(findTheme(values.theme), values.gradient));
-  set('gradient', gradients[(i + 1) % gradients.length].name);
+function nextColours() {
+  const gradients = findPalette(values.palette).gradients;
+  const i = gradients.indexOf(findGradient(findPalette(values.palette), values.colours));
+  set('colours', gradients[(i + 1) % gradients.length].name);
 }
 
-function toggleRising() {
-  set('rising', !values.rising);
+function togglePause() {
+  set('pause', !values.pause);
 }
 
 let linkNotice = null;
@@ -309,9 +376,13 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 function frame(stamp) {
   const idle = capture.kind === 'none';
-  if (idle && refill) fillFromDemo();
-  // With nothing shared the ridge only plays its made-up signal: hold it still for reduced motion.
-  if (!(reducedMotion.matches && idle)) ridge.advance(stamp / 1000, idle ? demo : ring);
+  // Before anything has played the ridge moves to its made-up signal; once stopped it is silent.
+  const made = idle && document.body.dataset.view !== 'stopped';
+  if (made && refill) fillFromDemo();
+  // The made-up signal is only for show: hold it still for reduced motion. What is real
+  // holds still through silence when asked to.
+  const held = made ? reducedMotion.matches : values.pause && stamp - heardAt > PAUSE_AFTER_MS;
+  if (!held) ridge.advance(stamp / 1000, made ? demo : idle ? quiet : ring);
   mesh.frame(ridge);
   stage.render(stamp);
   stats.paints += 1;
@@ -348,20 +419,23 @@ function showStats() {
 
 // ---- wiring --------------------------------------------------------------------------
 
-// Sets every setting to the link's value, or its theme's default where the link has none,
-// in table order so a theme comes before its gradient.
+// Sets every setting to the link's value, or the default under its preset and palette
+// where the link has none, in table order so a palette comes before its colours.
 function applyLink(given) {
-  const base = defaults(given.values.theme ?? OPENING_THEME);
+  const base = defaults(given.values.preset, given.values.palette);
   for (const s of SETTINGS) set(s.name, s.name in given.values ? given.values[s.name] : base[s.name]);
 }
 
 applyLink(link);
+// The camera's drift is for a visit that opens on the page as it comes, with nothing asked
+// of it; picking a preset afterwards sets it back to the preset's default, which is off.
+if (Object.keys(link.values).length === 0 && !link.view) set('drift', true);
 // A link pasted into this tab changes only the fragment, which does not reload the page.
 window.addEventListener('hashchange', () => {
   const next = decode(location.hash.slice(1));
   applyLink(next);
   if (!next.view) return;
-  if (stage && document.body.dataset.view === 'live') stage.setView(next.view);
+  if (stage && onStage()) stage.setView(next.view);
   else linkView = next.view;
 });
 toCover();
@@ -371,7 +445,7 @@ const supported = navigator.mediaDevices ? navigator.mediaDevices.getSupportedCo
 log(navigator.userAgent);
 log(
   `secure context: ${window.isSecureContext}, getDisplayMedia: ${!!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)}, ` +
-    `CaptureController: ${'CaptureController' in window}, tab sharing offered: ${canShare}`,
+    `CaptureController: ${'CaptureController' in window}, tab sharing offered: ${canShare}, screen sharing offered: ${canShareScreen}`,
 );
 log(
   `constraints known: ${['displaySurface', 'suppressLocalAudioPlayback', 'restrictOwnAudio']
@@ -400,25 +474,26 @@ function start() {
   applyValues();
   window.addEventListener('resize', applyValues);
   stage.setFov(values.fov);
-  stage.controls.enabled = document.body.dataset.view === 'live';
-  applyTheme();
+  stage.controls.enabled = onStage();
+  applyPalette();
   panel = createPanel({ values, onChange: set, onResetView: () => stage.resetView(), onCopyLink: copyLink });
   // A start that beat the graphics is already live.
-  if (document.body.dataset.view === 'live') stage.goLive({ view: linkView, drift: values.drift });
+  if (onStage()) stage.goLive({ view: linkView, drift: values.drift });
 
   applyLayout();
-  if (document.body.dataset.view !== 'live') stage.showCover();
+  if (!onStage()) stage.showCover();
   // The page opens on a full ridge.
   fillFromDemo();
 
-  // Once the camera has been moved, the tips get out of the way while the pointer rests.
+  // The first move of the camera retires the nudge and brings in the status line.
   stage.controls.addEventListener('start', () => document.body.classList.add('handled'));
 
-  status.addKey('t', 'theme', nextTheme);
-  status.addKey('g', 'gradient', nextGradient);
-  status.addKey('r', 'rising', toggleRising);
+  status.addKey('t', 'palette', nextPalette);
+  status.addKey('g', 'colours', nextColours);
+  status.addKey('v', 'reset view', () => stage.resetView());
   status.addKey('f', 'full screen', fullScreen);
-  status.addKey('v', 'view', () => stage.resetView());
+  pauseKey = status.addKey('q', 'pause on silence', togglePause);
+  pauseKey.setAttribute('aria-pressed', String(values.pause));
   status.addKey('p', 'options', toggleOptions);
 
   window.addEventListener('keydown', (event) => {
@@ -429,18 +504,18 @@ function start() {
     if (event.key === 'Escape' && document.body.dataset.view === 'intro') toCover();
     const key = event.key.toLowerCase();
     // A hotkey on a focused list replaces the list's own jump to a matching entry.
-    if (key.length === 1 && 'rtgpfvds'.includes(key) && event.target instanceof HTMLSelectElement) {
+    if (key.length === 1 && 'tgpfvdsq'.includes(key) && event.target instanceof HTMLSelectElement) {
       event.preventDefault();
       event.target.blur();
     }
-    if (key === 'r') toggleRising();
-    else if (key === 't') nextTheme();
-    else if (key === 'g') nextGradient();
+    if (key === 't') nextPalette();
+    else if (key === 'g') nextColours();
     else if (key === 'p') toggleOptions();
     else if (key === 'f') fullScreen();
     else if (key === 'v') stage.resetView();
+    else if (key === 'q') togglePause();
     else if (key === 'd') diagnostics.toggle();
-    else if (key === 's' && document.body.dataset.view === 'live') end();
+    else if (key === 's') startOrStop();
   });
   window.addEventListener('pointermove', status.stir);
   setInterval(showStats, 500);

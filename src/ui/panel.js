@@ -3,10 +3,10 @@
 import { Pane } from 'tweakpane';
 import { SETTINGS } from '../settings.js';
 
-const FOLDERS = ['levels', 'motion', 'shape', 'depth', 'camera', 'cover'];
+const FOLDERS = ['music reactivity', 'motion', 'shape', 'depth', 'camera', 'cover'];
 // How long the copy button shows what happened, in ms.
 const COPIED_MS = 2000;
-const GRADIENT = SETTINGS.find((s) => s.name === 'gradient');
+const COLOURS = SETTINGS.find((s) => s.name === 'colours');
 
 export function createPanel({ values, onChange, onResetView, onCopyLink }) {
   const container = document.createElement('div');
@@ -18,22 +18,49 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
   // Set while the panel catches up with `values`, so that does not echo back.
   let refreshing = false;
 
+  // One bubble for the whole panel, shown beside the label the pointer is on.
+  const bubble = document.createElement('div');
+  bubble.id = 'help';
+  bubble.setAttribute('role', 'tooltip');
+  bubble.hidden = true;
+  document.body.append(bubble);
+
+  // Hovering the label of `row` says what its setting does; the label takes a help cursor.
+  function explain(row, text) {
+    const label = row.querySelector('.tp-lblv_l');
+    if (!label) return;
+    label.classList.add('explained');
+    label.addEventListener('pointerenter', () => {
+      const at = label.getBoundingClientRect();
+      bubble.textContent = text;
+      bubble.style.top = `${at.top + at.height / 2}px`;
+      bubble.style.right = `${window.innerWidth - container.getBoundingClientRect().left + 8}px`;
+      bubble.hidden = false;
+    });
+    label.addEventListener('pointerleave', () => { bubble.hidden = true; });
+  }
+
   function bind(parent, s, index) {
     const params = { label: s.label, index };
     if (s.kind === 'number') Object.assign(params, { min: s.min, max: s.max, step: s.step });
-    const choices = s.choices ?? s.choicesFor?.(model.theme);
+    const choices = s.choices ?? s.choicesFor?.(model.palette);
     if (choices) params.options = choices.map((c) => ({ text: c, value: c }));
-    return parent.addBinding(model, s.name, params).on('change', (event) => {
+    const binding = parent.addBinding(model, s.name, params).on('change', (event) => {
       if (!refreshing) onChange(s.name, event.value);
     });
+    explain(binding.element, s.help);
+    return binding;
   }
 
   const basics = SETTINGS.filter((s) => s.group === 'basic');
   const bindings = new Map(basics.map((s) => [s.name, bind(pane, s)]));
-  let gradientTheme = model.theme;
-  pane.addButton({ title: 'reset view' }).on('click', () => onResetView());
+  // The palette the colours list was built for.
+  let listed = model.palette;
+  const reset = pane.addButton({ title: 'reset view' }).on('click', () => onResetView());
+  reset.element.title = 'puts the camera back at the front view';
   // `onCopyLink` resolves to a few words on how it went, shown on the button for a moment.
   const copy = pane.addButton({ title: 'copy link' });
+  copy.element.title = 'copies a link that opens pulsr with this look';
   let copied = null;
   copy.on('click', async () => {
     copy.title = (await onCopyLink()) || 'copy link';
@@ -47,15 +74,15 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
     for (const s of SETTINGS.filter((x) => x.folder === title)) bind(folder, s);
   }
 
-  // Shows `values` as they are now; the gradient list follows the theme.
+  // Shows `values` as they are now; the colours list follows the palette.
   function refresh() {
     refreshing = true;
     try {
       Object.assign(model, values);
-      if (model.theme !== gradientTheme) {
-        pane.remove(bindings.get('gradient'));
-        bindings.set('gradient', bind(pane, GRADIENT, basics.indexOf(GRADIENT)));
-        gradientTheme = model.theme;
+      if (model.palette !== listed) {
+        pane.remove(bindings.get('colours'));
+        bindings.set('colours', bind(pane, COLOURS, basics.indexOf(COLOURS)));
+        listed = model.palette;
       }
       pane.refresh();
     } finally {
@@ -64,7 +91,10 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
   }
 
   const show = () => { container.hidden = false; };
-  const hide = () => { container.hidden = true; };
+  const hide = () => {
+    container.hidden = true;
+    bubble.hidden = true;
+  };
   const toggle = () => { container.hidden = !container.hidden; };
 
   hide();

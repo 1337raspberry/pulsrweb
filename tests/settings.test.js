@@ -1,53 +1,127 @@
 import { expect, test } from 'vitest';
-import { OPENING_THEME, SETTINGS, decode, defaults, encode } from '../src/settings.js';
-import { THEMES } from '../src/themes.js';
+import { FLOWS, LAYOUTS, OPENING_PALETTE, OPENING_PRESET, PRESETS, SETTINGS, decode, defaults, encode } from '../src/settings.js';
+import { PALETTES } from '../src/palettes.js';
 
 const byName = Object.fromEntries(SETTINGS.map((s) => [s.name, s]));
 
-test('the table has the 32 settings', () => {
-  expect(SETTINGS.length).toBe(32);
+test('the table has the 36 settings', () => {
+  expect(SETTINGS.length).toBe(36);
   expect(byName.peak).toMatchObject({ default: 0.25, min: 0.05, max: 1.5, step: 0.01, label: 'height', group: 'basic' });
-  expect(byName.gamma).toMatchObject({ group: 'more', folder: 'levels' });
+  expect(byName.gamma).toMatchObject({ group: 'more', folder: 'music reactivity' });
+  expect(byName.lineWidth).toMatchObject({ label: 'line width', group: 'more', folder: 'shape' });
   expect(byName.rising).toMatchObject({ kind: 'boolean', default: false, folder: 'motion' });
-  expect(byName.drift).toMatchObject({ kind: 'boolean', default: true, folder: 'camera' });
+  expect(byName.drift).toMatchObject({ kind: 'boolean', default: false, folder: 'camera' });
   expect(byName.demoSpread).toMatchObject({ default: 0.27, label: 'spread', group: 'more', folder: 'cover' });
-  expect(SETTINGS.map((s) => s.name).slice(0, 2)).toEqual(['theme', 'gradient']);
+  expect(SETTINGS.map((s) => s.name).slice(0, 3)).toEqual(['preset', 'palette', 'colours']);
+  expect(SETTINGS.slice(0, 3).map((s) => s.label)).toEqual(['visual preset', 'palette', 'colours']);
+  expect(byName.pause).toMatchObject({ kind: 'boolean', default: false, label: 'pause on silence', sticky: true });
+});
+
+test('every setting says what it does in one short line', () => {
+  for (const s of SETTINGS) {
+    expect(s.help, s.name).toEqual(expect.any(String));
+    expect(s.help.length, s.name).toBeGreaterThan(10);
+    expect(s.help.length, s.name).toBeLessThanOrEqual(90);
+    expect(s.help, s.name).not.toMatch(/\n/);
+  }
 });
 
 test('defaults encode to nothing', () => expect(encode(defaults(), null)).toBe(''));
 
-test('the opening theme has the sleeve’s defaults, and every other theme pulsr’s own', () => {
-  expect(OPENING_THEME).toBe('division');
-  expect(defaults()).toMatchObject({ theme: 'division', gradient: 'white', rows: 80, speed: 12, peak: 0.25, span: 0.7, fadeCurve: 0, tilt: 40 });
-  expect(defaults('nord')).toMatchObject({
-    theme: 'nord', gradient: 'frost', peak: 0.6, speed: 30, rows: 51, lineWidth: 1.25, noise: 0, span: 1,
-    spacing: 0.38, depthScale: 0.39, fadeCurve: 0.75, alpha: 0.85, tilt: 18,
+test('the opening preset has the sleeve’s defaults, and immersive pulsr’s own', () => {
+  expect(PRESETS).toEqual(['division', 'immersive', 'inyoface', 'sheet']);
+  expect([OPENING_PRESET, OPENING_PALETTE]).toEqual(['division', 'greyscale']);
+  expect(defaults()).toMatchObject({
+    preset: 'division', palette: 'greyscale', colours: 'white', rows: 80, speed: 12, peak: 0.25, span: 0.7, fadeCurve: 0, tilt: 40,
+  });
+  expect(defaults('immersive')).toMatchObject({
+    preset: 'immersive', palette: 'greyscale', colours: 'white', peak: 0.6, speed: 30, rows: 51, lineWidth: 1.25, noise: 0,
+    span: 1, spacing: 0.38, depthScale: 0.39, fadeCurve: 0.75, alpha: 0.85, tilt: 18,
   });
   // What the two share.
-  expect(defaults('nord').gamma).toBe(defaults().gamma);
-  expect(Object.keys(defaults('nord'))).toEqual(Object.keys(defaults()));
+  expect(defaults('immersive').gamma).toBe(defaults().gamma);
+  expect(Object.keys(defaults('immersive'))).toEqual(Object.keys(defaults()));
 });
 
-test('a link is written against its own theme’s defaults', () => {
-  expect(encode(defaults('nord'), null)).toBe('theme=nord');
-  expect(encode({ ...defaults('nord'), gradient: 'aurora', rows: 80 }, null)).toBe('theme=nord&gradient=aurora&rows=80');
-  // The sleeve's value for a setting is a change under another theme, and the other way round.
+test('the closer presets are pulsr’s own from another seat', () => {
+  const { preset: a, tilt: tiltA, ...immersive } = defaults('immersive');
+  const { preset: b, tilt: tiltB, ...inyoface } = defaults('inyoface');
+  expect(inyoface).toEqual(immersive);
+  expect([tiltA, tiltB]).toEqual([18, 2]);
+  expect(defaults('sheet')).toEqual({
+    ...defaults('inyoface'), preset: 'sheet', flow: 'towards live', trench: 0.25, rows: 100, speed: 50,
+  });
+  expect(LAYOUTS.sheet.framing).toBeGreaterThan(LAYOUTS.inyoface.framing);
+  expect(LAYOUTS.sheet).toEqual({ sleeve: false, framing: 15.75, target: [0, 3, -7] });
+  expect(decode('preset=trenchrun').values.preset).toBeUndefined();
+  expect(defaults().flow).toBe('away');
+  expect(FLOWS).toEqual(['away', 'towards live']);
+  // No preset has the camera drift.
+  for (const preset of PRESETS) expect(defaults(preset).drift, preset).toBe(false);
+});
+
+test('every preset has a layout, and a setting within range for each default', () => {
+  for (const preset of PRESETS) {
+    const layout = LAYOUTS[preset];
+    expect(layout.sleeve || layout.framing > 0, preset).toBeTruthy();
+    const d = defaults(preset);
+    for (const s of SETTINGS) {
+      if (s.kind === 'number') {
+        expect(d[s.name], `${preset} ${s.name}`).toBeGreaterThanOrEqual(s.min);
+        expect(d[s.name], `${preset} ${s.name}`).toBeLessThanOrEqual(s.max);
+      }
+      if (s.choices) expect(s.choices, `${preset} ${s.name}`).toContain(d[s.name]);
+    }
+  }
+  expect(LAYOUTS.division).toEqual({ sleeve: true });
+});
+
+test('a flow is written with pluses and read back', () => {
+  expect(encode({ ...defaults('immersive'), flow: 'towards live' }, null)).toBe('preset=immersive&flow=towards+live');
+  expect(decode('flow=towards+live').values.flow).toBe('towards live');
+  expect(decode('flow=sideways').values.flow).toBeUndefined();
+  expect(decode('flow=towards').values.flow).toBeUndefined();
+  expect(decode('flow=towards+blended').values.flow).toBeUndefined();
+  expect(encode(defaults('sheet'), null)).toBe('preset=sheet');
+});
+
+test('colour is apart from the preset', () => {
+  // A palette changes nothing but colour, under either preset.
+  for (const preset of PRESETS) {
+    const { palette, colours, ...shape } = defaults(preset, 'nord');
+    const { palette: p0, colours: c0, ...shape0 } = defaults(preset);
+    expect([palette, colours]).toEqual(['nord', 'frost']);
+    expect(shape).toEqual(shape0);
+  }
+  // A preset changes nothing about colour.
+  expect(defaults('immersive', 'nord')).toMatchObject({ palette: 'nord', colours: 'frost' });
+});
+
+test('a link is written against the defaults of its own preset and palette', () => {
+  expect(encode(defaults('immersive'), null)).toBe('preset=immersive');
+  expect(encode(defaults('division', 'nord'), null)).toBe('palette=nord');
+  expect(encode({ ...defaults('immersive', 'nord'), colours: 'aurora', rows: 80 }, null))
+    .toBe('preset=immersive&palette=nord&colours=aurora&rows=80');
+  // A name with a space in it is written with a plus.
+  expect(encode({ ...defaults('division', 'catppuccin'), colours: 'latte blue-pink' }, null)).toBe('palette=catppuccin&colours=latte+blue-pink');
+  expect(decode('palette=catppuccin&colours=latte+blue-pink').values.colours).toBe('latte blue-pink');
+  // The sleeve's value for a setting is a change under the other preset, and the other way round.
   expect(encode({ ...defaults(), rows: 51 }, null)).toBe('rows=51');
-  const back = decode(encode({ ...defaults('nord'), peak: 0.9 }, null));
-  expect({ ...defaults(back.values.theme), ...back.values }).toEqual({ ...defaults('nord'), peak: 0.9 });
+  const back = decode(encode({ ...defaults('immersive', 'nord'), peak: 0.9 }, null));
+  expect({ ...defaults(back.values.preset, back.values.palette), ...back.values }).toEqual({ ...defaults('immersive', 'nord'), peak: 0.9 });
 });
 
 test('a look survives a round trip', () => {
-  const v = { ...defaults('nord'), gradient: 'aurora', peak: 0.9, rows: 60, rising: true, drift: false };
+  const v = { ...defaults('immersive', 'nord'), colours: 'aurora', peak: 0.9, rows: 60, rising: true, drift: true };
   const view = { position: [1, 7.5, 22], target: [0, 1.5, -4] };
   const back = decode(encode(v, view));
-  expect({ ...defaults(back.values.theme), ...back.values }).toEqual(v);
+  expect({ ...defaults(back.values.preset, back.values.palette), ...back.values }).toEqual(v);
   expect(back.view).toEqual(view);
 });
 
 test('numbers are written at their step’s precision', () => {
   expect(encode({ ...defaults(), peak: 0.9, rows: 60, lineWidth: 2, gamma: 5, noise: 0.05 }, null))
-    .toBe('peak=0.90&rows=60&lineWidth=2.00&gamma=5.0&noise=0.050');
+    .toBe('peak=0.90&rows=60&gamma=5.0&lineWidth=2.00&noise=0.050');
 });
 
 test('every setting round-trips at a non-default value', () => {
@@ -62,7 +136,7 @@ test('every setting round-trips at a non-default value', () => {
 });
 
 test('a bad fragment yields defaults and never throws', () => {
-  for (const f of ['peak=1e99&rows=-5&theme=<script>&gradient=nope&bogus=1&speed=abc&view=1,2,NaN',
+  for (const f of ['peak=1e99&rows=-5&palette=<script>&colours=nope&preset=nope&bogus=1&speed=abc&view=1,2,NaN',
                    '%%%', '&&&===', 'view=9e9,0,0,0,0,0', 'peak=', 'rising=maybe', 'peak=%E0%A4%A&rows',
                    '__proto__=1&constructor=2', 'peak=1e999', 'peak=0x10', 'peak=Infinity']) {
     const { values, view } = decode(f);
@@ -79,19 +153,21 @@ test('a bad fragment yields defaults and never throws', () => {
   }
   expect(decode('peak=1e99').values.peak).toBe(1.5);
   expect(decode('rows=-5').values.rows).toBe(10);
-  expect(decode('theme=<script>').values.theme).toBeUndefined();
+  expect(decode('palette=<script>').values.palette).toBeUndefined();
+  expect(decode('preset=nope').values.preset).toBeUndefined();
+  expect(decode('preset=immersive').values.preset).toBe('immersive');
   expect(decode('peak=').values.peak).toBeUndefined();
   expect(decode('rising=maybe').values.rising).toBeUndefined();
   expect(decode('rising=true').values.rising).toBe(true);
   expect(decode(undefined)).toEqual({ values: {}, view: null });
 });
 
-test('a gradient is checked against the fragment’s theme, else the default theme', () => {
-  expect(decode('theme=nord&gradient=aurora').values).toEqual({ theme: 'nord', gradient: 'aurora' });
-  expect(decode('gradient=aurora&theme=nord').values.gradient).toBe('aurora');
-  expect(decode('theme=nord&gradient=grey-white').values.gradient).toBeUndefined();
-  expect(decode('gradient=grey-white').values.gradient).toBe('grey-white');
-  expect(decode('gradient=aurora').values.gradient).toBeUndefined();
+test('colours are checked against the fragment’s palette, else the opening palette', () => {
+  expect(decode('palette=nord&colours=aurora').values).toEqual({ palette: 'nord', colours: 'aurora' });
+  expect(decode('colours=aurora&palette=nord').values.colours).toBe('aurora');
+  expect(decode('palette=nord&colours=grey-white').values.colours).toBeUndefined();
+  expect(decode('colours=grey-white').values.colours).toBe('grey-white');
+  expect(decode('colours=aurora').values.colours).toBeUndefined();
 });
 
 test('view needs six finite numbers within bounds', () => {
@@ -128,13 +204,15 @@ test('a view coordinate a hair below zero is written as 0.00', () => {
   expect(encode(defaults(), view)).toBe('view=0.00,9.50,15.50,0.00,0.00,-7.00');
 });
 
-// The page gives a theme without a gradient that theme's first gradient.
-test('every theme and gradient pair survives a round trip', () => {
-  for (const { name: theme, gradients } of THEMES) {
-    for (const { name: gradient } of gradients) {
-      const { values } = decode(encode({ ...defaults(theme), gradient }, null));
-      const back = { ...defaults(values.theme), ...values };
-      expect([back.theme, back.gradient]).toEqual([theme, gradient]);
+// The page gives a palette without colours that palette's first gradient.
+test('every palette and gradient pair survives a round trip, under either preset', () => {
+  for (const preset of PRESETS) {
+    for (const { name: palette, gradients } of PALETTES) {
+      for (const { name: colours } of gradients) {
+        const { values } = decode(encode({ ...defaults(preset, palette), colours }, null));
+        const back = { ...defaults(values.preset, values.palette), ...values };
+        expect([back.preset, back.palette, back.colours]).toEqual([preset, palette, colours]);
+      }
     }
   }
 });

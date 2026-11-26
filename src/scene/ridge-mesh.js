@@ -48,8 +48,19 @@ const GRADIENT_TOP = 0.6;
 // Without rising, the newest history row starts where the live row is; it stays hidden
 // until it has moved this share of a row back, so the two never fight for depth.
 const EMERGE = 0.1;
+// Rows coming towards the camera run this far in front of the scene's origin before they
+// go, and reach the live shape's full height this share of the way in.
+const LEAD = 6.4;
+const LIVE_FULL = 0.7;
 
-const VALUE_UNIFORMS = ['rows', 'peak', 'lineWidth', 'spacing', 'depthScale', 'fadeCurve', 'alpha'];
+// `flow` is the index of the flow setting's choice: 0 away, 1 towards live.
+const VALUE_UNIFORMS = ['rows', 'peak', 'lineWidth', 'spacing', 'depthScale', 'fadeCurve', 'alpha', 'trench', 'flow'];
+
+// 0 at `from`, 1 at `to`, eased between.
+const ease = (from, to, x) => {
+  const t = clamp(x.sub(from).div(float(to).sub(from)), 0, 1);
+  return t.mul(t).mul(float(3).sub(t.mul(2)));
+};
 
 export function createRidgeMesh({ history, resolution, pixelRatio }) {
   const points = history.width;
@@ -67,19 +78,37 @@ export function createRidgeMesh({ history, resolution, pixelRatio }) {
   const stops = [uniform(new Color()), uniform(new Color()), uniform(new Color())];
 
   // Row placement: instance 0 is the live row, instance k >= 1 is history row k - 1 back.
+  // `age` runs from 0 at the newest row to 1 at the oldest shown. Flowing away, the newest
+  // is nearest the camera and rows recede; flowing towards, it is furthest and rows arrive.
   const k = int(instanceIndex);
   const live = k.equal(0);
+  const away = u.flow.lessThan(0.5);
+  const slides = away.and(rising.greaterThan(0.5));
   const depth = select(live, float(0), float(instanceIndex).sub(1).add(phase));
-  const fade = clamp(depth.div(max(u.rows.sub(1), 1)), 0, 1);
-  const z = select(live.and(rising.greaterThan(0.5)), u.spacing.mul(phase.oneMinus()), depth.mul(u.spacing).negate());
+  const age = clamp(depth.div(max(u.rows.sub(1), 1)), 0, 1);
+  // 0 at the camera's end of the ridge, 1 at the far end.
+  const far = select(away, age, age.oneMinus());
+  const near = far.oneMinus();
+  const zAway = select(live.and(slides), u.spacing.mul(phase.oneMinus()), depth.mul(u.spacing).negate());
+  const zTowards = float(LEAD).sub(u.rows.sub(1).sub(depth).mul(u.spacing));
+  const z = select(away, zAway, zTowards);
   const capacity = int(history.capacity);
   const textureRow = select(live, int(0), newest.sub(k.sub(1)).add(capacity).mod(capacity).add(1));
-  const shown = rising.greaterThan(0.5).or(k.notEqual(1)).or(phase.greaterThanEqual(EMERGE));
-  const rise = u.peak.mul(HEIGHT).mul(u.depthScale.sub(1).mul(fade).add(1));
+  const shown = slides.or(k.notEqual(1)).or(phase.greaterThanEqual(EMERGE));
+  const rise = u.peak.mul(HEIGHT).mul(u.depthScale.sub(1).mul(far).add(1));
 
   const alongAt = (index) => float(index).div(points - 1);
-  // Level of point `index` and its world position on the row's top edge.
-  const shapeAt = (index) => textureLoad(texture, ivec2(index, textureRow)).x;
+  // What a row shows. Flowing away, the levels it was cut with. Flowing towards, the live
+  // levels, flat in the distance and full beside the camera. A trench flattens the middle
+  // of every row.
+  const shapeAt = (index) => {
+    const cut = textureLoad(texture, ivec2(index, textureRow)).x;
+    const now = textureLoad(texture, ivec2(index, int(0))).x.mul(ease(0, LIVE_FULL, near));
+    const across = alongAt(index).sub(0.5).abs().mul(2);
+    const walls = select(u.trench.greaterThan(0), ease(u.trench.mul(0.3), u.trench, across), float(1));
+    return select(away, cut, now).mul(walls);
+  };
+  // World position of point `index` on the row's top edge.
   const topAt = (index) => vec3(alongAt(index).sub(0.5).mul(WIDTH), shapeAt(index).mul(rise), z);
 
   const index = int(round(positionGeometry.x.add(0.5).mul(points - 1)));
@@ -90,7 +119,7 @@ export function createRidgeMesh({ history, resolution, pixelRatio }) {
   const lineColour = (() => {
     const t = varying(clamp(shape.div(GRADIENT_TOP), 0, 1));
     const leaving = clamp(u.rows.sub(1).sub(depth), 0, 1);
-    const a = varying(u.alpha.mul(max(fade.oneMinus(), 1e-4).pow(u.fadeCurve)).mul(leaving));
+    const a = varying(u.alpha.mul(max(near, 1e-4).pow(u.fadeCurve)).mul(leaving));
     const low = mix(stops[0], stops[1], t.mul(2));
     const high = mix(stops[1], stops[2], t.mul(2).sub(1));
     return mix(background, select(t.lessThan(0.5), low, high), a);
@@ -146,8 +175,9 @@ export function createRidgeMesh({ history, resolution, pixelRatio }) {
     line.count = rows;
   }
 
-  function setTheme(theme, gradient) {
-    background.value.set(theme.background);
+  // `gradient` is one entry of a palette: a background and three stops.
+  function setColours(gradient) {
+    background.value.set(gradient.background);
     gradient.stops.forEach((colour, i) => stops[i].value.set(colour));
   }
 
@@ -157,5 +187,5 @@ export function createRidgeMesh({ history, resolution, pixelRatio }) {
     phase.value = ridge.phase;
   }
 
-  return { object, setValues, setTheme, frame };
+  return { object, setValues, setColours, frame };
 }

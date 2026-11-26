@@ -11,7 +11,7 @@ export function canvasSize(clientWidth, clientHeight, devicePixelRatio) {
 }
 
 // How far a view's target may stray from the opening target, per axis.
-const TARGET_MARGIN = 6;
+export const TARGET_MARGIN = 6;
 
 const isPoint = (value) => Array.isArray(value) && value.length === 3 && value.every((n) => Number.isFinite(n));
 

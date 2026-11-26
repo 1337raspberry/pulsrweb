@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
+import { GUIDES } from '../src/ui/intro.js';
 
 const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
@@ -8,4 +9,19 @@ test('every id in the page is used once', () => {
   const ids = [...page.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
   expect(ids.length).toBeGreaterThan(20);
   expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+});
+
+// Both ways of sharing hand the page a picture it has no use for, and each says so.
+test('every way of sharing says the picture is unused and nothing leaves the computer', () => {
+  expect(Object.keys(GUIDES)).toEqual(['tab', 'screen']);
+  for (const [route, guide] of Object.entries(GUIDES)) {
+    expect(guide.private, route).toMatch(/picture is never used, and nothing you share leaves your computer$/);
+    for (const key of ['play', 'other', 'lead', 'row', 'audio']) expect(guide[key], `${route} ${key}`).toEqual(expect.any(String));
+    expect(guide.steps.length, route).toBe(3);
+  }
+  expect(GUIDES.screen.play).toMatch(/any app or player/);
+  // The first step says it for both, and offers the screen beside the tab.
+  const first = page.slice(page.indexOf('id="step1"'), page.indexOf('id="step2"'));
+  expect(first).toMatch(/picture is never used, and nothing you share leaves your computer/);
+  expect(first).toMatch(/id="start"[^]*id="startscreen"/);
 });

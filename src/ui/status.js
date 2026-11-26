@@ -1,18 +1,13 @@
-// The status line along the bottom while listening: what is playing, an optional hint,
-// and the key buttons. It shows with the options, or on its own while it has a hint, and
-// fades once the pointer has rested this long, in ms.
+// The status line along the bottom of the ridge: what is playing, an optional hint, the
+// button that stops or starts the sound, and the key buttons. The page's fading parts,
+// this line among them while sound plays, fade once the pointer has rested this long, in ms.
 const REST_AFTER_MS = 2500;
 
 const $ = (id) => document.getElementById(id);
 
-export function createStatus({ onStop }) {
+// `onToggle()` is called by the button that stops or starts the sound.
+export function createStatus({ onToggle }) {
   let restTimer = null;
-  let listening = false;
-  let open = false;
-
-  function sync() {
-    $('status').hidden = !(listening && (open || !$('hint').hidden));
-  }
 
   // Brings the page's fading parts back, and lets them fade once the pointer rests.
   function stir() {
@@ -24,27 +19,22 @@ export function createStatus({ onStop }) {
   function hint(text) {
     $('hint').textContent = text;
     $('hint').hidden = !text;
+    // Held: a line with a hint does not fade with the pointer.
     $('status').classList.toggle('hold', !!text);
-    sync();
   }
 
-  function show(text, stopLabel) {
+  // `text` says what is going on and `label` what the stop or start button does next.
+  function show(text, label) {
     $('what').textContent = text;
-    $('end').lastChild.textContent = stopLabel;
-    listening = true;
+    $('end').lastChild.textContent = label;
+    $('status').hidden = false;
     hint('');
     stir();
   }
 
   function hide() {
-    listening = false;
+    $('status').hidden = true;
     hint('');
-  }
-
-  // Whether the options are open, which the line shows alongside.
-  function setOpen(on) {
-    open = on;
-    sync();
   }
 
   // Wires the key button marked `letter`, adding it to the line if it is not there yet.
@@ -62,7 +52,7 @@ export function createStatus({ onStop }) {
     return button;
   }
 
-  $('end').addEventListener('click', () => onStop());
+  $('end').addEventListener('click', () => onToggle());
 
-  return { show, hide, hint, stir, setOpen, addKey };
+  return { show, hide, hint, stir, addKey };
 }

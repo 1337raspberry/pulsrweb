@@ -9,21 +9,21 @@ import { Color, PerspectiveCamera, Scene, Vector2, WebGPURenderer } from 'three/
 import { uniform } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { WIDTH } from './ridge-mesh.js';
-import { canvasSize, distanceFor, driftPose, mixPose, posterWidth, poseToPosition, positionToPose, safeView } from './view-math.js';
+import { TARGET_MARGIN, canvasSize, distanceFor, driftPose, mixPose, posterWidth, poseToPosition, positionToPose, safeView } from './view-math.js';
 
 const rad = (degrees) => (degrees * Math.PI) / 180;
 
-// Two layouts. The sleeve's front view is fitted to the poster and looks at the middle of
-// the ridge's depth, at this height; pulsr's own looks at a fixed point from closer in and
-// lower down, showing this much of the scene's height there.
+// Two kinds of layout. The sleeve's front view is fitted to the poster and looks at the
+// middle of the ridge's depth, at this height; the others look at a fixed point from closer
+// in and lower down, each showing its own amount of the scene's height there. That point is
+// OPEN_TARGET unless the layout names its own.
 const SLEEVE_TARGET_Y = 0.75;
 const SLEEVE_DEPTH = 23.7;
-const CLASSIC_TARGET = [0, 2, -7];
-const CLASSIC_FRAMING = 12.7;
+const OPEN_TARGET = [0, 2, -7];
 // Straight in front and 40 degrees up, where the rows stack into the sleeve's square.
 const FRONT = { azimuth: 0, polar: rad(50) };
 // Where the front view may look down from, in degrees above level.
-const MIN_TILT = 5;
+const MIN_TILT = 2;
 const MAX_TILT = 85;
 const COVER_FOV = 2;
 // How much of the scene's height the camera may show at the target, closest and furthest.
@@ -64,12 +64,17 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
   const camera = new PerspectiveCamera(COVER_FOV, 1, 1, 1000);
   // The front view's direction and the point it looks at follow the ridge's layout.
   let sleeve = true;
+  // Scene height an open layout's front view shows at its target.
+  let openFraming = 12.7;
   let front = { ...FRONT };
   let centre = [0, SLEEVE_TARGET_Y, -SLEEVE_DEPTH / 2];
   const controls = new OrbitControls(camera, canvas);
   controls.target.set(...centre);
   controls.enableDamping = true;
-  controls.enablePan = false;
+  // Panning slides the point the camera looks at, no further from the front view's than a
+  // link may put it.
+  controls.cursor.set(...centre);
+  controls.maxTargetRadius = TARGET_MARGIN;
   // Keeps the camera in front of and above the ridge.
   controls.minAzimuthAngle = FRONT.azimuth - rad(70);
   controls.maxAzimuthAngle = FRONT.azimuth + rad(70);
@@ -129,7 +134,7 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
 
   // The front pose: on the sleeve, framed so a row is as wide on screen as the poster.
   function home() {
-    if (!sleeve) return { ...front, framing: CLASSIC_FRAMING };
+    if (!sleeve) return { ...front, framing: openFraming };
     const width = canvas.clientWidth || 1;
     const height = canvas.clientHeight || 1;
     return { ...front, framing: (WIDTH * height) / posterWidth(width, height) };
@@ -189,16 +194,22 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
   const isDrifting = () => wander;
 
   // Follows the ridge: `depth` is how far back its rows reach, `tilt` the degrees the front
-  // view looks down from, and `sleeve` which layout it is. The camera keeps its direction
-  // and framing, except that a change of layout sends it to the new front view.
-  function setLayout({ depth, tilt, sleeve: toSleeve = true }) {
-    const changed = toSleeve !== sleeve;
+  // view looks down from, `sleeve` whether it is laid out as one, and `framing` and `target`
+  // the scene height an open layout shows and the point it looks at. The camera keeps its
+  // direction, its framing and any pan, except that a change of layout sends it to the new
+  // front view.
+  function setLayout({ depth, tilt, sleeve: toSleeve = true, framing = openFraming, target: lookAt = OPEN_TARGET }) {
+    const next = toSleeve ? [0, SLEEVE_TARGET_Y, -depth / 2] : [...lookAt];
+    const changed = toSleeve !== sleeve || (!toSleeve && (framing !== openFraming || next.some((n, i) => n !== centre[i])));
     if (changed && !script) settle();
     const pose = poseNow();
+    const panned = changed ? [0, 0, 0] : target().map((n, i) => n - centre[i]);
     sleeve = toSleeve;
+    openFraming = framing;
     front = { azimuth: 0, polar: rad(90 - Math.min(MAX_TILT, Math.max(MIN_TILT, tilt))) };
-    centre = sleeve ? [0, SLEEVE_TARGET_Y, -depth / 2] : [...CLASSIC_TARGET];
-    controls.target.set(...centre);
+    centre = next;
+    controls.cursor.set(...centre);
+    controls.target.set(...centre.map((n, i) => n + panned[i]));
     place(pose);
     if (!changed) return;
     if (covering) {

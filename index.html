@@ -24,9 +24,12 @@
     <p id="notice" role="status" hidden></p>
     <div class="step" id="step1">
       <button class="cta glow" id="start">share a tab</button>
+      <p class="aside" id="wider">music in an app, not a tab? <button class="link" id="startscreen">share your whole screen</button> with its sound instead. pulsr then hears everything this computer plays, so spotify, apple music or any other player works</p>
+      <p class="aside" id="nowider" hidden>chrome on linux can only pass on a tab’s sound, so the music has to play in a tab</p>
+      <p class="private">sharing is how a web page gets to hear what your computer is playing, and chrome sends a picture along with the sound. pulsr only listens: the picture is never used, and nothing you share leaves your computer</p>
     </div>
     <div class="step" id="step2" hidden>
-      <p>go play some music in another tab, then come back and click ready</p>
+      <p id="goplay"></p>
       <button class="cta" id="ready">ready</button>
     </div>
     <div class="step" id="step3" hidden>
@@ -49,21 +52,21 @@
       <ol id="steps"></ol>
       <p id="note" hidden></p>
       <button class="cta" id="sharenow">share</button>
+      <p class="private" id="private"></p>
+      <p class="aside" id="other"><button class="link" id="switch"></button></p>
     </div>
     <p id="fallback" hidden>this browser can’t share a tab, but you can <button class="link" id="usemic">use the microphone</button></p>
     <p id="terminal">pulsr also <a class="link" href="https://github.com/1337raspberry/pulsr" target="_blank" rel="noopener">runs in a terminal</a></p>
   </div>
 </main>
 
-<p id="tips">try click/drag/scrolling. press P to see more options and change themes</p>
+<p id="tips">try click/drag/scrolling. press P to see more options and change the look</p>
 
 <footer id="status" hidden>
   <span id="what"></span>
   <span id="hint" hidden></span>
   <button class="key" id="end"><b>s</b>stop sharing</button>
-  <button class="key" id="nexttheme"><b>t</b>theme</button>
-  <button class="key" id="rise"><b>r</b>rising</button>
-  <button class="key" id="full"><b>f</b>full screen</button>
+  <button class="key" id="nextpalette"><b>t</b>palette</button>
 </footer>
 
 <div id="panel" hidden>
