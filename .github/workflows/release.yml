@@ -1,0 +1,201 @@
+name: Release
+
+# Packages the desktop app for macOS, Windows and Linux and attaches the installers to a
+# draft GitHub release, to be looked over and published by hand.
+#
+# Start it by pushing a version tag:
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# The tag has to be the version in package.json with a `v` in front. A suffix after a
+# hyphen (v0.2.0-rc1) is allowed and marks the release as a pre-release. Running the
+# workflow by hand with a tag builds that tag again and replaces the files on its release.
+#
+# What comes out:
+#   macOS    one .dmg that runs on Apple silicon and Intel
+#   Windows  an .exe installer for 64-bit Intel and AMD machines
+#   Linux    a .deb and an .rpm, each for 64-bit Intel/AMD and for 64-bit ARM
+#
+# Nothing is signed with a certificate, so there are no secrets in this workflow. The macOS
+# app carries an ad hoc signature and the Windows installer none, and each system warns
+# before the first run.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'An existing tag to build, such as v0.2.0'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+  GH_REPO: ${{ github.repository }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  draft:
+    name: Draft the release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Check the tag against package.json
+        run: |
+          version=$(jq -r .version package.json)
+          tagged=${TAG#v}
+          if [ "v$tagged" != "$TAG" ] || [ "${tagged%%-*}" != "$version" ]; then
+            echo "::error::tag $TAG does not match version $version in package.json"
+            exit 1
+          fi
+
+      - name: Create the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG is already there; its files will be replaced"
+            exit 0
+          fi
+          prerelease=
+          case "$TAG" in *-*) prerelease=--prerelease ;; esac
+          gh release create "$TAG" --draft --verify-tag --generate-notes --title "pulsr ${TAG#v}" $prerelease
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: draft
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `only` is the system electron-builder packages for, and `files` how many
+          # installers that should leave in `release`.
+          - platform: macos
+            runner: macos-15
+            only: --mac
+            files: 1
+          - platform: windows
+            runner: windows-2025
+            only: --win
+            files: 1
+          # Both Linux architectures are packaged on the one Intel runner: the app's
+          # program for each comes ready-made, and only the wrapping happens here.
+          - platform: linux
+            runner: ubuntu-24.04
+            only: --linux
+            files: 4
+    env:
+      ONLY: ${{ matrix.only }}
+      FILES: ${{ matrix.files }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Install Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: npm
+
+      # electron-builder wraps an .rpm with rpmbuild, which Ubuntu does not come with.
+      - name: Install rpmbuild
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y rpm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build the page
+        run: npm run build
+
+      - name: Package
+        run: npx electron-builder "$ONLY" --publish never
+
+      - name: Check the installers
+        run: |
+          shopt -s nullglob
+          installers=(release/*.dmg release/*.exe release/*.deb release/*.rpm)
+          ls -l "${installers[@]}"
+          if [ "${#installers[@]}" -ne "$FILES" ]; then
+            echo "::error::expected $FILES installers, found ${#installers[@]}"
+            exit 1
+          fi
+          case "$ONLY" in
+            --mac)
+              app=release/mac-universal/pulsr.app
+              archs=$(lipo -archs "$app/Contents/MacOS/pulsr")
+              echo "architectures: $archs"
+              case "$archs" in *x86_64*arm64*|*arm64*x86_64*) ;; *)
+                echo "::error::the app is not universal"
+                exit 1 ;;
+              esac
+              # Apple silicon runs nothing unsigned, and an ad hoc signature names nobody.
+              codesign --verify --deep --strict "$app"
+              signature=$(codesign -dvv "$app" 2>&1)
+              if ! printf '%s\n' "$signature" | grep -q '^Signature=adhoc$' ||
+                 printf '%s\n' "$signature" | grep -q '^Authority='; then
+                echo "::error::the app is not signed ad hoc"
+                exit 1
+              fi
+              # Without this line macOS hands the app silence in place of the computer's sound.
+              /usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' "$app/Contents/Info.plist"
+              ;;
+            --linux)
+              # The package is `pulsrgui`: plain `pulsr` is the terminal program.
+              for package in release/*.deb; do
+                dpkg-deb --field "$package" Package Architecture
+                [ "$(dpkg-deb --field "$package" Package)" = pulsrgui ]
+              done
+              for package in release/*.rpm; do
+                rpm --query --package --queryformat '%{NAME} %{ARCH}\n' "$package"
+                [ "$(rpm --query --package --queryformat '%{NAME}' "$package")" = pulsrgui ]
+              done
+              ;;
+          esac
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          cd release
+          attach=()
+          for installer in *.dmg *.exe *.deb *.rpm; do
+            if command -v sha256sum >/dev/null; then
+              sha256sum "$installer" > "$installer.sha256"
+            else
+              shasum -a 256 "$installer" > "$installer.sha256"
+            fi
+            cat "$installer.sha256"
+            attach+=("$installer" "$installer.sha256")
+          done
+          gh release upload "$TAG" "${attach[@]}" --clobber
