@@ -1,10 +1,9 @@
-## try it on the web here - https://pulsrviz.app/
+## try it on the web here - https://pulsrviz.app/ or download a standalone version in [releases](https://github.com/1337raspberry/pulsrweb/releases)
 
-## a bunch of slop prose from the robot below that i cba rewriting. 
-
-## its just a dumb visualiser but it looks cool huh? i'm autistic as shit and i like when music syncs up with visuals. do whatever you want with this
+### its just a dumb visualiser but it looks cool imo. i'm autistic as shit and i like when music syncs up with visuals. do whatever you want with this
 
 --------------------
+### a bunch of slop prose from the robot below that i cba rewriting:
 --------------------
 
 
