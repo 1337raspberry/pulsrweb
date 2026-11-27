@@ -724,6 +724,8 @@ function frame(stamp) {
   for (const entry of looking) entry.frame?.(tick);
   for (const entry of filtering) entry.frame?.(tick);
   mesh.frame(ridge, tick);
+  // A shape that travels says where the camera should keep looking.
+  stage.setLead(looking[0]?.lead?.() ?? null);
   backdrop.frame(tick);
   stage.frameFilters(tick);
   // The camera's uniforms are written once it has moved for this frame.
@@ -812,7 +814,7 @@ function start() {
     pixelRatio: stage.pixelRatio,
     shared,
   });
-  backdrop = createBackdrop({ scene: stage.scene, shared, resolution: stage.resolution, pixelRatio: stage.pixelRatio });
+  backdrop = createBackdrop({ scene: stage.scene, shared, resolution: stage.resolution, pixelRatio: stage.pixelRatio, renderer: stage.renderer });
   stage.scene.add(mesh.object);
   applyLook();
   applyFilters();

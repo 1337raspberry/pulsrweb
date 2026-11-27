@@ -22,5 +22,10 @@ import vignette from './vignette.js';
 import mirror from './mirror.js';
 import plotarea from './plotarea.js';
 import teletext from './teletext.js';
+import vhs from './vhs.js';
+import stacker from './stacker.js';
+import bonfire from './bonfire.js';
+import mosh from './mosh.js';
+import thermal from './thermal.js';
 
-export default [none, glowup, windowpane, typewriter, tty, braille, telly, kaleido, vortex, echo, fluted, onebit, pocket, ledwall, pressrun, fringe, tracking, tubes, vignette, mirror, plotarea, teletext];
+export default [none, glowup, windowpane, typewriter, tty, braille, telly, kaleido, vortex, echo, fluted, onebit, pocket, ledwall, pressrun, fringe, tracking, tubes, vignette, mirror, plotarea, teletext, vhs, stacker, bonfire, mosh, thermal];

@@ -5,7 +5,7 @@
 // any picture just as it does over a flat colour.
 import { rtt, screenUV, uv, vec2 } from 'three/tsl';
 
-export function createBackdrop({ scene, shared, resolution, pixelRatio }) {
+export function createBackdrop({ scene, shared, resolution, pixelRatio, renderer }) {
   let made = null;
   // The texture the current picture is drawn into, if there is a picture.
   let picture = null;
@@ -25,7 +25,8 @@ export function createBackdrop({ scene, shared, resolution, pixelRatio }) {
       picture.renderTarget.dispose();
       picture = null;
     }
-    const context = { ...shared, resolution, pixelRatio, uv: uv() };
+    // The renderer is handed on for a backdrop that draws a scene of its own into its picture.
+    const context = { ...shared, resolution, pixelRatio, renderer, uv: uv() };
     made = entry.build ? entry.build(context) : {};
     const colour = made.colour ?? entry.colour?.(context);
     let ground = shared.background;

@@ -21,7 +21,7 @@ export const ROLLED_WILD = [...ROLLED, 'flow', 'rising', ...STRAYED];
 const STAGINGS = ['division', 'immersive', 'closeup'];
 
 // Entries made for one scene, which need the rest of that scene to make sense.
-const KEPT_OUT = { backdrop: ['spreadsheet'], filter: ['plotarea'] };
+const KEPT_OUT = { backdrop: ['spreadsheet'], filter: ['plotarea', 'teletext'] };
 // The share of rolls that leave a slot at its first, plain entry. A roll then changes a
 // few things about the picture rather than all of them at once.
 const PLAIN = { shape: 0.5, backdrop: 0.4, filter: 0.5 };

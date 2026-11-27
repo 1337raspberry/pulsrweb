@@ -16,5 +16,8 @@ import storm from './storm.js';
 import deepend from './deepend.js';
 import studio from './studio.js';
 import spreadsheet from './spreadsheet.js';
+import pipes from './pipes.js';
+import maze from './maze.js';
+import ricochet from './ricochet.js';
 
-export default [plain, dusk, smokies, retrosun, pane, cityglow, glyphfall, aurora, eclipse, stargazer, nebula, cinders, flurry, storm, deepend, studio, spreadsheet];
+export default [plain, dusk, smokies, retrosun, pane, cityglow, glyphfall, aurora, eclipse, stargazer, nebula, cinders, flurry, storm, deepend, studio, spreadsheet, pipes, maze, ricochet];

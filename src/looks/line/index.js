@@ -18,5 +18,9 @@ import chrome from './chrome.js';
 import sketch from './sketch.js';
 import sparks from './sparks.js';
 import area from './area.js';
+import flames from './flames.js';
+import bricks from './bricks.js';
+import clay from './clay.js';
+import drip from './drip.js';
 
-export default [solid, dashed, neon, zap, dots, fairy, yarn, glass, papercut, ribbon, skyline, veils, grid, scope, nib, chrome, sketch, sparks, area];
+export default [solid, dashed, neon, zap, dots, fairy, yarn, glass, papercut, ribbon, skyline, veils, grid, scope, nib, chrome, sketch, sparks, area, flames, bricks, clay, drip];

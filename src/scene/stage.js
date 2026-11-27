@@ -5,7 +5,7 @@
 // the ridge into a drawing; everything else through the `fov` setting. Moving between
 // them keeps the framing, so the ridge holds its size while its depth opens up.
 
-import { Color, PerspectiveCamera, RenderPipeline, Scene, Vector2, WebGPURenderer } from 'three/webgpu';
+import { Color, PerspectiveCamera, RenderPipeline, Scene, Vector2, Vector3, WebGPURenderer } from 'three/webgpu';
 import { pass, rtt, screenUV, uniform } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { WIDTH } from './ridge-mesh.js';
@@ -37,6 +37,9 @@ const LENS_SECONDS = 2.4;
 // long the drift takes to reach its full sway, in seconds.
 const REHOME_SECONDS = 1.2;
 const DRIFT_EASE_SECONDS = 4;
+// How closely the camera keeps up with a ridge that leads it: the time it takes to close
+// most of a gap, in seconds.
+const LEAD_SECONDS = 0.25;
 
 // Starts the renderer on `canvas`; rejects if neither backend starts. `onLost(info)` is
 // called if the graphics device or context is lost later, after which nothing draws.
@@ -134,6 +137,11 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
   let dragging = false;
   let lastNow = performance.now();
   let lastUpdate = lastNow;
+  // Where a ridge that travels has asked the camera to look, if it has, and how far the
+  // camera is carried off its own place to do so.
+  let leading = null;
+  const lead = new Vector3();
+  const wanted = new Vector3();
 
   // The front pose: on the sleeve, framed so a row is as wide on screen as the poster.
   function home() {
@@ -343,6 +351,14 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
     run(home, GLIDE_SECONDS, true);
   }
 
+  // Carries the camera along with a ridge that travels: `point` is where in the world the
+  // layout's target should be seen to be, or null for where it is. The camera, its limits
+  // and its views all stay as they are about the layout's own target; only the place it is
+  // drawn from moves, easing after the point.
+  function setLead(point) {
+    leading = point;
+  }
+
   // A move by hand takes the camera from any script, and ends the drift for good.
   controls.addEventListener('start', () => {
     script = null;
@@ -393,23 +409,30 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
       // The time step keeps a spinning camera to the same speed on any screen.
       controls.update(Math.min(Math.max((now - lastUpdate) / 1000, 0), 0.1));
     }
+    const step = Math.min(Math.max((now - lastUpdate) / 1000, 0), 0.1);
     lastUpdate = now;
+    if (leading) wanted.set(leading[0] - centre[0], leading[1] - centre[1], leading[2] - centre[2]);
+    else wanted.set(0, 0, 0);
+    lead.lerp(wanted, 1 - Math.exp(-step / LEAD_SECONDS));
 
     // The clip planes follow the camera, so depth stays precise from far away.
     const distance = camera.position.distanceTo(controls.target);
     camera.near = Math.max(0.5, distance - CLIP_REACH);
     camera.far = distance + CLIP_REACH;
     camera.updateProjectionMatrix();
+    // Drawn from where the lead carries it, and put back for the controls.
+    camera.position.add(lead);
     camera.updateMatrixWorld();
     if (placed) placed(camera);
     if (pipeline) pipeline.render();
     else renderer.render(scene, camera);
+    camera.position.sub(lead);
   }
 
   showCover();
 
   return {
     renderer, scene, camera, controls, backend, resolution, pixelRatio,
-    resize, setBackground, setFilters, frameFilters, setFov, setDrift, isDrifting, setLayout, getView, setView, roam, resetView, showCover, goLive, render,
+    resize, setBackground, setFilters, frameFilters, setFov, setDrift, isDrifting, setLayout, setLead, getView, setView, roam, resetView, showCover, goLive, render,
   };
 }

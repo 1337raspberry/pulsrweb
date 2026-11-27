@@ -45,8 +45,10 @@ test('every value rolled is one the options offer', () => {
 test('entries that belong to one scene are never rolled', () => {
   for (const look of many(2000)) {
     expect(look.backdrop).not.toBe('spreadsheet');
-    expect(look.filter).not.toBe('plotarea');
-    expect(look.filter2).not.toBe('plotarea');
+    for (const filter of ['plotarea', 'teletext']) {
+      expect(look.filter).not.toBe(filter);
+      expect(look.filter2).not.toBe(filter);
+    }
   }
 });
 
@@ -78,7 +80,8 @@ test('every entry that is not kept out turns up', () => {
   const looks = many(6000);
   for (const name of ['shape', 'line', 'tint', 'backdrop', 'filter']) {
     const seen = new Set(looks.map((look) => look[name]));
-    const kept = byName[name].choices.filter((choice) => choice !== 'spreadsheet' && choice !== 'plotarea');
+    const out = name === 'backdrop' ? ['spreadsheet'] : name === 'filter' ? ['plotarea', 'teletext'] : [];
+    const kept = byName[name].choices.filter((choice) => !out.includes(choice));
     expect([...seen].sort(), name).toEqual([...kept].sort());
   }
   expect(new Set(looks.map((look) => look.palette)).size).toBe(byName.palette.choices.length);
@@ -174,8 +177,10 @@ test('every value of a wild roll is one the options allow', () => {
       }
     }
     expect(look.backdrop).not.toBe('spreadsheet');
-    expect(look.filter).not.toBe('plotarea');
-    expect(look.filter2).not.toBe('plotarea');
+    for (const filter of ['plotarea', 'teletext']) {
+      expect(look.filter).not.toBe(filter);
+      expect(look.filter2).not.toBe(filter);
+    }
     if (look.filter !== 'none') expect(look.filter2).not.toBe(look.filter);
   }
 });
@@ -203,7 +208,7 @@ test('a wild roll puts any entry in any slot, with no leaning to the plain ones'
   expect(share('backdrop', 'plain')).toBeLessThan(0.12);
   // Two heavy filters at once can come up, as a plain roll never allows.
   expect(looks.some((look) => look.filter === 'kaleido' && look.filter2 === 'tty')).toBe(true);
-  expect(new Set(looks.map((look) => look.filter2)).size).toBe(byName.filter.choices.length - 1);
+  expect(new Set(looks.map((look) => look.filter2)).size).toBe(byName.filter.choices.filter((choice) => !['plotarea', 'teletext'].includes(choice)).length);
   expect(share('flow', 'towards live')).toBeGreaterThan(0.28);
   expect(share('flow', 'towards live')).toBeLessThan(0.39);
   expect(share('rising', true)).toBeGreaterThan(0.45);
