@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import {
-  FLOWS, LAYOUTS, OPENING_PALETTE, OPENING_PRESET, PRESETS, PRESET_COLOURS, SETTINGS, SHELVED, decode, defaults, encode,
+  FLOWS, LAYOUTS, OPENING_PALETTE, OPENING_PRESET, PRESETS, PRESET_COLOURS, SETTINGS, SHELVED, decode, defaults, encode, readLook,
+  writeLook,
 } from '../src/settings.js';
 import { PALETTES, findPalette } from '../src/palettes.js';
 import { findEntry } from '../src/looks/index.js';
@@ -259,4 +260,43 @@ test('every palette and gradient pair survives a round trip, under either preset
       }
     }
   }
+});
+
+test('a look as text is what a link carries, and the opening look is spelled out', () => {
+  expect(writeLook(defaults(), null)).toBe('preset=division');
+  const neon = { ...defaults('immersive'), line: 'neon', peak: 0.7 };
+  expect(writeLook(neon, null)).toBe(encode(neon, null));
+  expect(writeLook(neon, null)).toBe('preset=immersive&line=neon&peak=0.70');
+  const view = { position: [1, 2, 3], target: [0, 2, -7] };
+  expect(writeLook(defaults(), view)).toBe('view=1.00,2.00,3.00,0.00,2.00,-7.00');
+});
+
+test('a look written as text reads back as the same look', () => {
+  const view = { position: [1, 2, 3], target: [0, 2, -7] };
+  for (const preset of PRESETS) {
+    const values = { ...defaults(preset), tilt: 33 };
+    const look = readLook(writeLook(values, view));
+    expect({ ...defaults(look.values.preset, look.values.palette), ...look.values }, preset).toEqual(values);
+    expect(look.view, preset).toEqual(view);
+  }
+  expect(readLook(writeLook(defaults(), null))).toEqual({ values: { preset: 'division' }, view: null });
+});
+
+test('a whole link reads as the look after its #, with space round it forgiven', () => {
+  const look = { values: { preset: 'immersive', line: 'neon' }, view: null };
+  expect(readLook('preset=immersive&line=neon')).toEqual(look);
+  expect(readLook('  https://pulsrviz.app/#preset=immersive&line=neon\n')).toEqual(look);
+  expect(readLook('app://pulsr/#preset=immersive&line=neon')).toEqual(look);
+  expect(readLook('#preset=immersive&line=neon')).toEqual(look);
+});
+
+test('text that is no look reads as nothing, rather than as the opening look', () => {
+  for (const text of ['', '   ', 'hello', 'https://pulsrviz.app/', 'https://example.com/#top', 'preset=nosuch', 'line', 'a=b&c=d', '#']) {
+    expect(readLook(text), text).toBeNull();
+  }
+  expect(readLook(undefined)).toBeNull();
+  expect(readLook(null)).toBeNull();
+  expect(readLook('x'.repeat(5000))).toBeNull();
+  // One setting it knows is enough, and what it does not know is dropped.
+  expect(readLook('nonsense=1&tilt=20')).toEqual({ values: { tilt: 20 }, view: null });
 });

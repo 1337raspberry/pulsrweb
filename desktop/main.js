@@ -58,6 +58,9 @@ function menu() {
   const mac = process.platform === 'darwin';
   return Menu.buildFromTemplate([
     ...(mac ? [{ role: 'appMenu' }] : []),
+    // Copy, paste and select all in the options' text box: on a Mac those keys work only
+    // through this menu.
+    { role: 'editMenu' },
     { label: 'View', submenu: [{ role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' }] },
     { role: 'windowMenu' },
   ]);

@@ -331,6 +331,22 @@ export function encode(values, view) {
   return parts.join('&');
 }
 
+// A look as text, to keep or to hand to someone: what a link to it carries after its `#`.
+// The opening look, which a link leaves unsaid, is spelled out, so there is always
+// something to copy.
+export function writeLook(values, view) {
+  return encode(values, view) || `preset=${OPENING_PRESET}`;
+}
+
+// The look written in `text`, which may be a whole link to one: what decode() makes of
+// it, or null where it names no setting and no view.
+export function readLook(text) {
+  if (typeof text !== 'string') return null;
+  const written = text.trim();
+  const look = decode(written.slice(written.indexOf('#') + 1));
+  return Object.keys(look.values).length > 0 || look.view ? look : null;
+}
+
 // Unambiguous, so a long run of digits cannot make matching slow.
 const NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)(e[+-]?\d+)?$/i;
 const MAX_FRAGMENT = 2000;

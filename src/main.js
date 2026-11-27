@@ -17,8 +17,9 @@ import { HistoryRows } from './scene/history-rows.js';
 import { posterWidth } from './scene/view-math.js';
 import { createRidgeMesh, WIDTH as ROW_WIDTH } from './scene/ridge-mesh.js';
 import { createPanel } from './ui/panel.js';
-import { FLOWS, LAYOUTS, PRESETS, PRESET_COLOURS, SETTINGS, decode, defaults, encode } from './settings.js';
+import { FLOWS, LAYOUTS, PRESETS, PRESET_COLOURS, SETTINGS, decode, defaults, encode, readLook, writeLook } from './settings.js';
 import { PALETTES, findPalette, findGradient } from './palettes.js';
+import { ROLLED, ROLLED_WILD, roll, rollView } from './roll.js';
 import { findEntry } from './looks/index.js';
 import { createShared } from './looks/shared.js';
 import { createBackdrop } from './scene/backdrop.js';
@@ -39,8 +40,6 @@ const SILENT_PEAK = 0.001;
 const PAUSE_AFTER_MS = 1000;
 // How far an arrow key moves through a file.
 const SEEK_STEP_SEC = 10;
-// Where the page lives on the web.
-const SITE = 'https://pulsrviz.app/';
 // World height the cover allows for peaks above its back row, for the poster's shape.
 const PEAK_ROOM = 1.5;
 
@@ -440,9 +439,15 @@ function lost(info) {
 
 // What a change of preset leaves alone, beside the preset itself.
 const COLOUR = new Set(['preset', 'palette', 'colours']);
+const NOTHING = new Set();
+// What a roll leaves alone as well, though it changes the preset: how the ridge answers
+// the music, and the camera's drift.
+const UNROLLED = new Set(['gamma', 'floorCut', 'gain', 'attack', 'decay', 'rising', 'drift']);
+const EVERYTHING = new Set(SETTINGS.map((s) => s.name));
 
-// The one way a setting changes: from the panel, a key or the link.
-function set(name, value) {
+// The one way a setting changes: from the panel, a key or the link. A change of preset
+// leaves the settings named in `kept` as they are.
+function set(name, value, kept = NOTHING) {
   if (name === 'preset') {
     const changed = values.preset !== value;
     values.preset = value;
@@ -450,7 +455,7 @@ function set(name, value) {
       // A preset brings its own defaults for everything but colour. Only what differs is
       // set, so a setting that holds its value is not started afresh.
       const base = defaults(value, values.palette);
-      for (const s of SETTINGS) if (!COLOUR.has(s.name) && !s.sticky && values[s.name] !== base[s.name]) set(s.name, base[s.name]);
+      for (const s of SETTINGS) if (!COLOUR.has(s.name) && !s.sticky && !kept.has(s.name) && values[s.name] !== base[s.name]) set(s.name, base[s.name]);
       // A scene brings its colours with it; the other presets leave the colours alone.
       if (PRESET_COLOURS[value]) {
         const own = defaults(value);
@@ -590,33 +595,93 @@ function nextColours() {
   set('colours', gradients[(i + 1) % gradients.length].name);
 }
 
+// Every setting and the camera's view as they stood before each roll, the newest last,
+// for stepping back to a look that went by too fast. No more than this many are kept.
+const passed = [];
+const MOST_PASSED = 50;
+// Whether a roll goes further: every slider of the shape, the depth and the camera, and
+// the camera's own place, as well as the look. The options have a box for it.
+let wild = false;
+
+// Puts on a look at random, keeping what it replaces.
+function rollLook() {
+  const names = wild ? ROLLED_WILD : ROLLED;
+  let next = roll(Math.random, wild);
+  while (names.every((name) => next[name] === values[name])) next = roll(Math.random, wild);
+  passed.push({ values: { ...values }, view: stage.getView() });
+  if (passed.length > MOST_PASSED) passed.shift();
+  for (const name of names) set(name, next[name], UNROLLED);
+  if (wild) stage.roam(rollView());
+}
+
+// Back to every setting and the view as the last roll found them.
+function unrollLook() {
+  const before = passed.pop();
+  if (!before) return;
+  set('preset', before.values.preset, EVERYTHING);
+  for (const s of SETTINGS) if (values[s.name] !== before.values[s.name]) set(s.name, before.values[s.name]);
+  stage.setView(before.view);
+}
+
 function togglePause() {
   set('pause', !values.pause);
 }
 
 let linkNotice = null;
 
-// Puts the current look in the address bar, then on the clipboard. The view goes with it
-// only when the camera is not drifting, since a drifting camera has no view to keep.
-async function copyLink() {
-  const text = encode(values, stage.isDrifting() ? null : stage.getView());
-  const tail = text ? `#${text}` : '';
-  const here = location.origin + location.pathname + tail;
-  let notice = 'Link copied';
-  try {
-    history.replaceState(null, '', here);
-    // The desktop app's own address opens nowhere else, so its links lead to the site.
-    await navigator.clipboard.writeText(where.desktop ? SITE + tail : here);
-  } catch {
-    notice = 'Link is in the address bar';
-  }
+// Says `notice` in the status line for a moment.
+function notify(notice) {
   status.hint(notice);
   status.stir();
   clearTimeout(linkNotice);
   linkNotice = setTimeout(() => {
     if ($('hint').textContent === notice) status.hint('');
   }, LINK_NOTICE_MS);
+}
+
+// The camera's view as a look carries it: none while the camera drifts, since a drifting
+// camera has no view to keep.
+const viewNow = () => (stage && !stage.isDrifting() ? stage.getView() : null);
+
+// The look as text, for the options of the desktop app to show.
+const lookText = () => writeLook(values, viewNow());
+
+// Puts the current look in the address bar, then on the clipboard as a link to it. The
+// desktop app's own address opens nowhere else, so there the look is copied as text, to
+// be pasted into the options of another copy of the app or after the site's `#`.
+async function copyLink() {
+  const text = encode(values, viewNow());
+  const here = location.origin + location.pathname + (text ? `#${text}` : '');
+  let notice = where.desktop ? 'Look copied' : 'Link copied';
+  try {
+    history.replaceState(null, '', here);
+    await navigator.clipboard.writeText(where.desktop ? lookText() : here);
+  } catch {
+    notice = where.desktop ? 'Could not copy: the look is in the box below' : 'Link is in the address bar';
+  }
+  notify(notice);
   return notice.toLowerCase();
+}
+
+// Puts on a look read from a link or from text, and its view if it has one.
+function openLook(look) {
+  applyLink(look);
+  if (!look.view) return;
+  if (stage && onStage()) stage.setView(look.view);
+  else linkView = look.view;
+}
+
+// Puts on the look pasted into the options, keeping the one it replaces for Shift+R.
+function pasteLook(text) {
+  const look = readLook(text);
+  if (!look) {
+    notify('That is not a pulsr look');
+    panel.refresh();
+    return;
+  }
+  passed.push({ values: { ...values }, view: stage.getView() });
+  if (passed.length > MOST_PASSED) passed.shift();
+  openLook(look);
 }
 
 // Not every browser can fill the screen with a page (an iPhone's cannot).
@@ -713,11 +778,7 @@ applyLink(link);
 if (Object.keys(link.values).length === 0 && !link.view) set('drift', true);
 // A link pasted into this tab changes only the fragment, which does not reload the page.
 window.addEventListener('hashchange', () => {
-  const next = decode(location.hash.slice(1));
-  applyLink(next);
-  if (!next.view) return;
-  if (stage && onStage()) stage.setView(next.view);
-  else linkView = next.view;
+  openLook(decode(location.hash.slice(1)));
 });
 toCover();
 $('panel').hidden = !query.has('debug');
@@ -760,7 +821,10 @@ function start() {
   stage.setFov(values.fov);
   stage.controls.enabled = onStage();
   applyPalette();
-  panel = createPanel({ values, onChange: set, onResetView: () => stage.resetView(), onCopyLink: copyLink });
+  panel = createPanel({
+    values, onChange: set, onResetView: () => stage.resetView(), onCopyLink: copyLink, onWild: (on) => { wild = on; },
+    desktop: where.desktop, lookText, onPasteLook: pasteLook,
+  });
   // A start that beat the graphics is already live.
   if (onStage()) stage.goLive({ view: linkView, drift: values.drift });
 
@@ -774,6 +838,7 @@ function start() {
 
   status.addKey('t', 'palette', nextPalette);
   status.addKey('g', 'colours', nextColours);
+  status.addKey('r', 'random', rollLook).title = 'a look at random. shift+R goes back to the one before';
   status.addKey('v', 'reset view', () => stage.resetView());
   status.addKey('f', 'full screen', fullScreen);
   pauseKey = status.addKey('q', 'pause on silence', togglePause);
@@ -801,13 +866,14 @@ function start() {
     if (event.target.closest?.('textarea, input:not([type="checkbox"])')) return;
     const key = event.key.toLowerCase();
     // Up and down step through the presets, except where the arrows belong to a list, a
-    // menu or one of the options' sliders. Stepping leaves the status line as it is, so a
-    // look can be tried after another with nothing over the picture.
+    // menu or one of the options' sliders. R puts on a look at random, and with shift goes
+    // back to the one before. Neither brings the status line back, so a look can be tried
+    // after another with nothing over the picture.
     const stepping = (key === 'arrowup' || key === 'arrowdown') && !event.target.closest?.('select, menu, .tp-sldv_t');
-    if (!stepping) status.stir();
+    if (!stepping && key !== 'r') status.stir();
     if (event.key === 'Escape' && document.body.dataset.view === 'intro') toCover();
     // A hotkey on a focused list replaces the list's own jump to a matching entry.
-    if (key.length === 1 && 'tgpfvdsqonib'.includes(key) && event.target instanceof HTMLSelectElement) {
+    if (key.length === 1 && 'tgrpfvdsqonib'.includes(key) && event.target instanceof HTMLSelectElement) {
       event.preventDefault();
       event.target.blur();
     }
@@ -817,6 +883,7 @@ function start() {
     }
     if (key === 't') nextPalette();
     else if (key === 'g') nextColours();
+    else if (key === 'r') (event.shiftKey ? unrollLook : rollLook)();
     else if (key === 'p') toggleOptions();
     else if (key === 'f') fullScreen();
     else if (key === 'v') stage.resetView();
@@ -837,5 +904,5 @@ function start() {
   stage.renderer.setAnimationLoop(frame);
 
   // A hook for checking the page from a console.
-  window.pulsr = { ring, ridge, stats, stage, mesh, shared, values, set, panel, report: diagnostics.report, toCover, openIntro, toLive, explain: intro.explain, showGuide: intro.showGuide };
+  window.pulsr = { ring, ridge, stats, stage, mesh, shared, values, set, panel, rollLook, unrollLook, report: diagnostics.report, toCover, openIntro, toLive, explain: intro.explain, showGuide: intro.showGuide };
 }

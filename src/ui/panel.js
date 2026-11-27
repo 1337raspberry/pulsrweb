@@ -1,5 +1,6 @@
 // The control panel, top right: the basic settings and two buttons, with everything else
-// folded away under `more`.
+// folded away under `more`. In the desktop app, where a link leads nowhere, the copy button
+// copies the look as text, and a box under it holds that text to copy out or paste over.
 import { Pane } from 'tweakpane';
 import { SETTINGS } from '../settings.js';
 
@@ -8,7 +9,7 @@ const FOLDERS = ['music reactivity', 'motion', 'shape', 'depth', 'camera', 'cove
 const COPIED_MS = 2000;
 const COLOURS = SETTINGS.find((s) => s.name === 'colours');
 
-export function createPanel({ values, onChange, onResetView, onCopyLink }) {
+export function createPanel({ values, onChange, onResetView, onCopyLink, onWild, desktop = false, lookText, onPasteLook }) {
   const container = document.createElement('div');
   container.id = 'controls';
   document.body.append(container);
@@ -57,19 +58,44 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
   // What a look is put together from, one list per slot.
   const look = pane.addFolder({ title: 'look', expanded: true });
   for (const s of SETTINGS.filter((x) => x.group === 'look')) bind(look, s);
+  // Not part of a look: how far the R key's roll of a random one goes.
+  const rolling = { wild: false };
+  const wilder = pane.addBinding(rolling, 'wild', { label: 'even more random' }).on('change', (event) => onWild(event.value));
+  explain(wilder.element, 'R rolls every shape, depth and camera slider and moves the camera: all but music reactivity');
   // The palette the colours list was built for.
   let listed = model.palette;
   const reset = pane.addButton({ title: 'reset view' }).on('click', () => onResetView());
   reset.element.title = 'puts the camera back at the front view';
   // `onCopyLink` resolves to a few words on how it went, shown on the button for a moment.
-  const copy = pane.addButton({ title: 'copy link' });
-  copy.element.title = 'copies a link that opens pulsr with this look';
+  const copyTitle = desktop ? 'copy look' : 'copy link';
+  const copy = pane.addButton({ title: copyTitle });
+  copy.element.title = desktop ? 'copies this look as text, to keep or to send to someone' : 'copies a link that opens pulsr with this look';
   let copied = null;
   copy.on('click', async () => {
-    copy.title = (await onCopyLink()) || 'copy link';
+    copy.title = (await onCopyLink()) || copyTitle;
     clearTimeout(copied);
-    copied = setTimeout(() => { copy.title = 'copy link'; }, COPIED_MS);
+    copied = setTimeout(() => { copy.title = copyTitle; }, COPIED_MS);
   });
+  // The look as text. Typing or pasting another over it and pressing enter puts that one on.
+  const written = { look: '' };
+  let box = null;
+  if (desktop) {
+    box = pane.addBinding(written, 'look', { label: 'paste look' }).on('change', (event) => {
+      if (!refreshing) onPasteLook(event.value);
+    });
+    explain(box.element, 'this look as text: copy it out, or paste another in and press enter');
+    // The camera moves without the panel hearing of it, so the text is brought up to date
+    // as the box is entered.
+    box.element.addEventListener('focusin', () => showLook());
+  }
+  function showLook() {
+    if (!box || written.look === lookText()) return;
+    const was = refreshing;
+    refreshing = true;
+    written.look = lookText();
+    box.refresh();
+    refreshing = was;
+  }
 
   const more = pane.addFolder({ title: 'more', expanded: false });
   for (const title of FOLDERS) {
@@ -82,6 +108,7 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
     refreshing = true;
     try {
       Object.assign(model, values);
+      if (box) written.look = lookText();
       if (model.palette !== listed) {
         pane.remove(bindings.get('colours'));
         bindings.set('colours', bind(pane, COLOURS, basics.indexOf(COLOURS)));
@@ -93,12 +120,18 @@ export function createPanel({ values, onChange, onResetView, onCopyLink }) {
     }
   }
 
-  const show = () => { container.hidden = false; };
+  const show = () => {
+    container.hidden = false;
+    showLook();
+  };
   const hide = () => {
     container.hidden = true;
     bubble.hidden = true;
   };
-  const toggle = () => { container.hidden = !container.hidden; };
+  const toggle = () => {
+    container.hidden = !container.hidden;
+    showLook();
+  };
 
   hide();
   return { show, hide, toggle, refresh };

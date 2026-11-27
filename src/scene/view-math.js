@@ -62,6 +62,21 @@ export function positionToPose(position, target, fovDegrees) {
   };
 }
 
+// The pose `home` turned to one side and brought in or out. `turn` is the share of the way
+// round to the sideways limit on that side, below zero for the one side and above for the
+// other, where a limit of infinity counts as half a turn; `zoom` multiplies the framing.
+// `limits` holds the least and most `azimuth` and `framing` the camera may have.
+export function roamedPose(home, { turn = 0, zoom = 1 }, limits) {
+  const [least, most] = limits.azimuth;
+  const reach = turn < 0 ? home.azimuth - least : most - home.azimuth;
+  const [nearest, furthest] = limits.framing;
+  return {
+    azimuth: home.azimuth + turn * (Number.isFinite(reach) ? reach : Math.PI),
+    polar: home.polar,
+    framing: Math.min(furthest, Math.max(nearest, home.framing * zoom)),
+  };
+}
+
 // A pose blended between `a` and `b`; `t` is clamped to 0…1 and eased with smoothstep.
 export function mixPose(a, b, t) {
   const c = Math.min(1, Math.max(0, t));

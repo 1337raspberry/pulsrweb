@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  canvasSize, distanceFor, driftPose, mixPose, posterWidth, poseToPosition, positionToPose, safeView,
+  canvasSize, distanceFor, driftPose, mixPose, posterWidth, poseToPosition, positionToPose, roamedPose, safeView,
 } from '../src/scene/view-math.js';
 
 test('the canvas matches the screen’s pixels, up to a ratio of two', () => {
@@ -95,5 +95,35 @@ describe('poses', () => {
       expect(p.framing).toBeGreaterThan(0.95 * home.framing);
       expect(p.framing).toBeLessThanOrEqual(home.framing + 1e-9);
     }
+  });
+});
+
+describe('roamedPose', () => {
+  const home = { azimuth: 0, polar: 1.2, framing: 12 };
+  const limits = { azimuth: [-1, 1], framing: [5, 70] };
+
+  test('no turn and no zoom leaves the pose where it was', () => {
+    expect(roamedPose(home, {}, limits)).toEqual(home);
+  });
+
+  test('a turn is a share of the way to the limit on that side', () => {
+    expect(roamedPose(home, { turn: 0.5 }, limits).azimuth).toBeCloseTo(0.5);
+    expect(roamedPose(home, { turn: -1 }, limits).azimuth).toBeCloseTo(-1);
+    // From a pose that is not half way between the limits, each side has its own reach.
+    const off = { ...home, azimuth: 0.6 };
+    expect(roamedPose(off, { turn: 1 }, limits).azimuth).toBeCloseTo(1);
+    expect(roamedPose(off, { turn: -0.5 }, limits).azimuth).toBeCloseTo(-0.2);
+  });
+
+  test('with no limit a full turn share is half a turn', () => {
+    const free = { azimuth: [-Infinity, Infinity], framing: [5, 70] };
+    expect(roamedPose(home, { turn: 1 }, free).azimuth).toBeCloseTo(Math.PI);
+    expect(roamedPose(home, { turn: -0.5 }, free).azimuth).toBeCloseTo(-Math.PI / 2);
+  });
+
+  test('zoom multiplies the framing within what the camera may show, and the height is kept', () => {
+    expect(roamedPose(home, { zoom: 1.5 }, limits)).toMatchObject({ framing: 18, polar: 1.2 });
+    expect(roamedPose(home, { zoom: 0.1 }, limits).framing).toBe(5);
+    expect(roamedPose(home, { zoom: 10 }, limits).framing).toBe(70);
   });
 });

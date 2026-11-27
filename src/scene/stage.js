@@ -9,7 +9,7 @@ import { Color, PerspectiveCamera, RenderPipeline, Scene, Vector2, WebGPURendere
 import { pass, rtt, screenUV, uniform } from 'three/tsl';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { WIDTH } from './ridge-mesh.js';
-import { TARGET_MARGIN, canvasSize, distanceFor, driftPose, mixPose, posterWidth, poseToPosition, positionToPose, safeView } from './view-math.js';
+import { TARGET_MARGIN, canvasSize, distanceFor, driftPose, mixPose, posterWidth, poseToPosition, positionToPose, roamedPose, safeView } from './view-math.js';
 
 const rad = (degrees) => (degrees * Math.PI) / 180;
 
@@ -322,6 +322,19 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
     run(() => to, GLIDE_SECONDS, true);
   }
 
+  // Sends the camera somewhere else round the layout's front view: turned `turn` of the way
+  // to one side, its framing multiplied by `zoom`, looking at a point `pan` from the
+  // layout's own. All of it stays within what the camera could be moved to by hand.
+  function roam({ turn = 0, zoom = 1, pan = [0, 0, 0] }) {
+    const limits = { azimuth: [controls.minAzimuthAngle, controls.maxAzimuthAngle], framing: [MIN_FRAMING, MAX_FRAMING] };
+    const to = roamedPose(home(), { turn, zoom }, limits);
+    if (!script) settle();
+    const from = poseNow();
+    controls.target.set(...centre.map((n, i) => n + Math.min(TARGET_MARGIN, Math.max(-TARGET_MARGIN, pan[i]))));
+    place(from);
+    run(() => to, GLIDE_SECONDS, true);
+  }
+
   function resetView() {
     if (!script) settle();
     const from = poseNow();
@@ -397,6 +410,6 @@ export async function createStage(canvas, { forceWebGL = false, onLost } = {}) {
 
   return {
     renderer, scene, camera, controls, backend, resolution, pixelRatio,
-    resize, setBackground, setFilters, frameFilters, setFov, setDrift, isDrifting, setLayout, getView, setView, resetView, showCover, goLive, render,
+    resize, setBackground, setFilters, frameFilters, setFov, setDrift, isDrifting, setLayout, getView, setView, roam, resetView, showCover, goLive, render,
   };
 }

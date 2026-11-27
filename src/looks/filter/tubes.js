@@ -1,11 +1,11 @@
 // Every line becomes a glass tube of neon on a dark wall: a white-hot core, coloured glass
-// either side of it, a soft haze round it, and now and then a stretch that stutters on a beat.
+// either side of it, and a soft haze round it that swells with the bass.
 // A backdrop stays on the wall, dimmed, and only the ridge's own lines light up.
-import { abs, clamp, float, floor, max, mix, step, uniform, vec3, vec4 } from 'three/tsl';
+import { clamp, float, max, mix, vec3, vec4 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { gaussianBlur } from 'three/addons/tsl/display/GaussianBlurNode.js';
 import { groundOf, handOn } from '../lib/filter-ground.js';
-import { fullHueOf, onsetOf, signal, standoutOf } from '../lib/filter-kit.js';
+import { fullHueOf, signal, standoutOf } from '../lib/filter-kit.js';
 
 export default {
   name: 'tubes',
@@ -32,31 +32,12 @@ export default {
     const wide = spread.getTextureNode().sample(uv);
     const glass = clamp(wide.a.mul(2.4).sub(core.mul(0.6)), 0, 1);
     const hue = mix(wide.rgb.div(wide.a.max(1e-3)), own, core);
-    // A stretch of tubes stutters off on some beats, a different one each time, unless less
-    // motion has been asked for.
-    const stutter = uniform(-1);
-    const band = floor(uv.y.mul(18));
-    const out = step(0.5, abs(band.sub(stutter)).oneMinus());
-    const lit = float(1).sub(out.mul(0.85));
     // The wall is what is behind the ridge, dimmed; a filter after this one is told so.
     const wall = (at) => ground(at).mul(0.3);
     const tube = hue.mul(glass).mul(0.85).add(mix(hue, vec3(1), 0.7).mul(core).mul(level.mul(0.3).add(0.9)));
     const shine = haze.rgb.mul(hue.add(0.2)).mul(0.6);
-    const output = handOn(vec4(wall(uv).add(tube.add(shine).mul(lit)), 1), wall);
+    const output = handOn(vec4(wall(uv).add(tube).add(shine), 1), wall);
 
-    let left = 0;
-    const onBeat = onsetOf('beat');
-    function frame({ dt, shared }) {
-      left -= dt;
-      const beat = onBeat(shared.signals);
-      const calm = shared.still?.value > 0.5;
-      if (left <= 0 && !calm && beat && Math.random() < 0.35) {
-        stutter.value = Math.floor(Math.random() * 18);
-        left = 0.12;
-      } else if (left <= 0) {
-        stutter.value = -1;
-      }
-    }
-    return { output, frame, dispose: () => { spread.dispose(); haze.dispose(); } };
+    return { output, dispose: () => { spread.dispose(); haze.dispose(); } };
   },
 };
