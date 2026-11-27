@@ -28,8 +28,8 @@ const BANDS = 64;
 const WIDTH = BANDS * 2;
 // A share that has been silent this long gets a hint, in ms.
 const SILENT_HINT_MS = 4000;
-// How long a notice about the link stays in the status line, in ms.
-const LINK_NOTICE_MS = 2000;
+// How long a passing notice stays in the status line, in ms.
+const NOTICE_MS = 2000;
 // How long after the music starts the camera begins to drift, in ms.
 const DRIFT_AFTER_MS = 600;
 // How long the camera takes to return to the cover, in seconds.
@@ -627,37 +627,36 @@ function togglePause() {
   set('pause', !values.pause);
 }
 
-let linkNotice = null;
+let noticeTimer = null;
 
 // Says `notice` in the status line for a moment.
 function notify(notice) {
   status.hint(notice);
   status.stir();
-  clearTimeout(linkNotice);
-  linkNotice = setTimeout(() => {
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => {
     if ($('hint').textContent === notice) status.hint('');
-  }, LINK_NOTICE_MS);
+  }, NOTICE_MS);
 }
 
 // The camera's view as a look carries it: none while the camera drifts, since a drifting
 // camera has no view to keep.
 const viewNow = () => (stage && !stage.isDrifting() ? stage.getView() : null);
 
-// The look as text, for the options of the desktop app to show.
+// The look as text, for the options to show.
 const lookText = () => writeLook(values, viewNow());
 
-// Puts the current look in the address bar, then on the clipboard as a link to it. The
-// desktop app's own address opens nowhere else, so there the look is copied as text, to
-// be pasted into the options of another copy of the app or after the site's `#`.
-async function copyLink() {
+// Puts the current look on the clipboard as text, to be pasted into the options of
+// another pulsr, on the site or in the desktop app. It goes in the address bar as well,
+// so that loading the page again opens on the same look.
+async function copyLook() {
   const text = encode(values, viewNow());
-  const here = location.origin + location.pathname + (text ? `#${text}` : '');
-  let notice = where.desktop ? 'Look copied' : 'Link copied';
+  let notice = 'Look copied';
   try {
-    history.replaceState(null, '', here);
-    await navigator.clipboard.writeText(where.desktop ? lookText() : here);
+    history.replaceState(null, '', location.origin + location.pathname + (text ? `#${text}` : ''));
+    await navigator.clipboard.writeText(lookText());
   } catch {
-    notice = where.desktop ? 'Could not copy: the look is in the box below' : 'Link is in the address bar';
+    notice = 'Could not copy: the look is in the box below';
   }
   notify(notice);
   return notice.toLowerCase();
@@ -822,8 +821,8 @@ function start() {
   stage.controls.enabled = onStage();
   applyPalette();
   panel = createPanel({
-    values, onChange: set, onResetView: () => stage.resetView(), onCopyLink: copyLink, onWild: (on) => { wild = on; },
-    desktop: where.desktop, lookText, onPasteLook: pasteLook,
+    values, onChange: set, onResetView: () => stage.resetView(), onCopyLook: copyLook, onWild: (on) => { wild = on; },
+    lookText, onPasteLook: pasteLook,
   });
   // A start that beat the graphics is already live.
   if (onStage()) stage.goLive({ view: linkView, drift: values.drift });
