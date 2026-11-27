@@ -35,8 +35,19 @@ win:
     - target: nsis
       arch: x64
 
+# A .deb, for Debian, Ubuntu and their relatives: it installs like any other package, and
+# sets up what Ubuntu needs before it lets the app's sandbox run.
 linux:
   category: AudioVideo
+  # One picture per size, in the sizes a Linux desktop's icon theme looks for.
+  icon: desktop/icons
+  # The command is `pulsrgui`, since plain `pulsr` is the terminal program.
+  executableName: pulsrgui
+  # Names the menu entry after the app, so the desktop ties the open window to it.
+  syncDesktopName: true
   target:
-    - target: AppImage
+    - target: deb
       arch: x64
+
+deb:
+  packageName: pulsrgui

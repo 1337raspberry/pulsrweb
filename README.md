@@ -31,7 +31,7 @@ npm run desktop:dev    # open the app on the dev server (run `npm run dev` first
 npm run desktop:pack   # build an installer for this system into release/
 ```
 
-The Mac app is signed ad hoc, so macOS refuses it the first time it is opened: allow it under System Settings, Privacy & Security, "Open Anyway". Windows shows a similar warning, with "More info" and then "Run anyway".
+The Mac app is signed ad hoc, so macOS refuses it the first time it is opened: allow it under System Settings, Privacy & Security, "Open Anyway". Windows shows a similar warning, with "More info" and then "Run anyway". On Linux the app comes as a `.deb` for Debian, Ubuntu and their relatives, and its command is `pulsrgui`, since plain `pulsr` is the terminal program.
 
 ## Tests
 

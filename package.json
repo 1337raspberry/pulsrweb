@@ -11,6 +11,7 @@
   "private": true,
   "type": "module",
   "main": "desktop/main.js",
+  "desktopName": "pulsrgui.desktop",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
