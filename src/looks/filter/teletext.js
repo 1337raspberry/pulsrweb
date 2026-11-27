@@ -41,7 +41,7 @@ const CSS = ['#000000', '#ff0000', '#00ff00', '#ffff00', '#0000ff', '#ff00ff', '
 // through them.
 const BANDS = [[BLUE, YELLOW], [RED, WHITE], [GREEN, BLUE], [MAGENTA, WHITE], [CYAN, BLUE], [YELLOW, BLUE]];
 // What each subpage says under the title; the page turns through them on its own.
-const SUBPAGES = ['Sound in eight colours', 'Two blocks by three', 'Keep it tuned here'];
+const SUBPAGES = ['BREAKING NEWS', 'THIS JUST IN', 'SAOR ALBA', 'EYUP', 'WIGGLY LINES'];
 // The coloured prompts along the bottom row: colour, label and the column it starts in.
 const PROMPTS = [[RED, 'palette', 1], [GREEN, 'colours', 11], [YELLOW, 'preset', 21], [CYAN, 'index', 31]];
 // The rows of text, and the title band's.
